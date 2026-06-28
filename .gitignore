@@ -1,0 +1,54 @@
+# ── Python ─────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── IDE / Editor ───────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.kun-design/
+
+# ── System ─────────────────────────────────────────
+Thumbs.db
+*.db
+
+# ── Binaries ───────────────────────────────────────
+*.exe
+*.dll
+*.so
+*.dylib
+
+# ── Runtime user data (never commit) ───────────────
+backup/
+themes/
+updates/
+*.part
+last_install_error.txt
+
+# ── Debug / patch / one-off scripts ────────────────
+har_analysis.txt
+test_enc.txt
+run_with_log.bat
+debug_start.bat
+patch_*.py
+debug_*.py
+test_*.py
+test_*.png
+*_raw.png
+cursorvault/cleanup_styles.py
+cursorvault/do_replace.py
+cursorvault/replace_styles.py
+cursorvault/replace_styles.css
+
+# generated dirs under package
+cursorvault/themes/
+cursorvault/bin/
+
+# 抓包数据
+抓包数据/
