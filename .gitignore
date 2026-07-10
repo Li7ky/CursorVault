@@ -1,0 +1,44 @@
+# ── Python ─────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── IDE / Editor ───────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.kun-design/
+
+# ── System ──────────────────────────────────────
+Thumbs.db
+*.db
+
+# ── Binaries ────────────────────────────────────
+*.exe
+!cursorvault/bin/*.exe
+
+# ── Project-specific ────────────────────────────
+# debug/temp files
+har_analysis.txt
+test_enc.txt
+run_with_log.bat
+debug_start.bat
+
+# generated test dirs
+cursorvault/themes/themes/
+cursorvault/themes/generated/
+
+# 抓包数据 (network captures)
+抓包数据/
+
+# backup reg files
+backup/*.reg
+
+# downloads
+themes/downloads/*
+!themes/downloads/.gitkeep
