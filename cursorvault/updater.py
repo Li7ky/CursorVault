@@ -33,7 +33,6 @@ ALLOWED_UPDATE_PREFIXES = (
     "run.py",
     "requirements.txt",
     "README.md",
-    "CHANGELOG.md",
     "LICENSE",
 )
 
