@@ -31,6 +31,22 @@ class ThemeManager:
         self._themes: dict[str, Theme] = {}
         self._load_imported_themes()
 
+    def _theme_dir_for_name(self, name: str) -> Path:
+        """Return a theme directory guaranteed to stay under ``imported``.
+
+        Theme names come from both user input and remote metadata, so they must
+        never be used as unchecked filesystem paths.
+        """
+        name = name.strip()
+        if not name or name in {".", ".."} or any(char in name for char in ("/", "\\", ":")):
+            raise ValueError("主题名称不能为空，且不能包含路径分隔符")
+
+        root = self.imported_dir.resolve()
+        candidate = (root / name).resolve()
+        if not candidate.is_relative_to(root):
+            raise ValueError("主题名称必须位于主题目录内")
+        return candidate
+
     def _load_imported_themes(self):
         """扫描 imported 目录加载已经导入的主题."""
         if not self.imported_dir.exists():
@@ -43,9 +59,11 @@ class ThemeManager:
             cursor_files: dict[CursorType, Path] = {}
 
             for ct in CursorType:
-                cur_path = theme_dir / f"{ct.value}.cur"
-                if cur_path.exists():
-                    cursor_files[ct] = cur_path
+                for suffix in (".cur", ".ani"):
+                    cursor_path = theme_dir / f"{ct.value}{suffix}"
+                    if cursor_path.exists():
+                        cursor_files[ct] = cursor_path
+                        break
 
             if not cursor_files:
                 continue
@@ -78,17 +96,22 @@ class ThemeManager:
 
     def import_cur_directory(self, name: str, source_dir: Path, source_url: str = "") -> Optional[Theme]:
         """从目录导入一组 .cur 文件作为主题."""
-        theme_dir = self.imported_dir / name
+        theme_dir = self._theme_dir_for_name(name)
         theme_dir.mkdir(parents=True, exist_ok=True)
 
+        cursor_map = build_cursor_map(find_cursor_files(source_dir))
         cursor_files: dict[CursorType, Path] = {}
-        for ct in CursorType:
-            src = source_dir / f"{ct.value}.cur"
-            if src.exists():
-                dst = theme_dir / f"{ct.value}.cur"
-                if not dst.exists() or dst.stat().st_size != src.stat().st_size:
-                    dst.write_bytes(src.read_bytes())
+        for ct, src in cursor_map.items():
+            suffix = src.suffix.lower()
+            dst = theme_dir / f"{ct.value}{suffix}"
+            try:
+                shutil.copy2(src, dst)
+                # Do not leave an older cursor of the other format active.
+                alternate = theme_dir / f"{ct.value}{'.ani' if suffix == '.cur' else '.cur'}"
+                alternate.unlink(missing_ok=True)
                 cursor_files[ct] = dst
+            except OSError:
+                continue
 
         if not cursor_files:
             return None
@@ -130,7 +153,7 @@ class ThemeManager:
         Returns:
             安装的主题，失败返回 None
         """
-        theme_dir = self.imported_dir / slug
+        theme_dir = self._theme_dir_for_name(slug)
         theme_dir.mkdir(parents=True, exist_ok=True)
 
         # 解压并安装
@@ -159,7 +182,10 @@ class ThemeManager:
         if name not in self._themes:
             return False
 
-        theme_dir = self.imported_dir / name
+        try:
+            theme_dir = self._theme_dir_for_name(name)
+        except ValueError:
+            return False
         if theme_dir.exists():
             shutil.rmtree(theme_dir)
 
@@ -171,7 +197,10 @@ class ThemeManager:
         theme = self._themes.get(name)
         if not theme:
             return None
-        path = self.imported_dir / theme.name
+        try:
+            path = self._theme_dir_for_name(theme.name)
+        except ValueError:
+            return None
         if path.exists():
             return path
         return None

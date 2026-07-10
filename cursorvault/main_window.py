@@ -21,557 +21,102 @@ from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkRepl
 
 from . import __version__, __app_name__
 from .theme_manager import ThemeManager
+from .downloader import find_cursor_files
 from .cursor_preview import CursorGalleryWidget
 from .system_cursor import system_cursor_api
 from .zhutix_client import ZhutixClient, ZhutixPack
 from .models import CursorType
 
 APP_STYLESHEET = """
-/* ════════════════════════════════════════════════════
-   CursorVault — 全局样式表 v3.0
-   配色: 雾蓝灰底 + 海蓝主色 + 渐变强调 + 微光阴影
-   ════════════════════════════════════════════════════ */
-
-/* ── 全局 ────────────────────────────────────── */
-* {
-    font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
-}
-QMainWindow, QWidget#centralWidget {
-    background-color: #f1f4f8;
-}
-
-/* ── 顶部导航栏 ──────────────────────────────── */
-QWidget#navBar {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 #ffffff, stop:1 #f8fafc);
-    border-bottom: 1px solid #e2e8f0;
-    min-height: 64px;
-}
-QLabel#appLogo {
-    font-size: 28px;
-    color: #3b82f6;
-    font-weight: 300;
-}
-QLabel#appTitle {
-    font-size: 18px;
-    font-weight: 700;
-    color: #0f172a;
-    font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
-    letter-spacing: 0.3px;
-}
-QLabel#appSubtitle {
-    font-size: 11px;
-    color: #94a3b8;
-    font-weight: 400;
-    letter-spacing: 0.5px;
-}
-
-/* ── 工具栏按钮 ──────────────────────────────── */
-QPushButton#primaryToolBtn {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #3b82f6, stop:1 #2563eb);
-    color: #ffffff;
-    border: none;
-    border-radius: 9px;
-    padding: 8px 20px;
-    font-size: 13px;
-    font-weight: 600;
-}
-QPushButton#primaryToolBtn:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #2563eb, stop:1 #1d4ed8);
-}
-QPushButton#primaryToolBtn:pressed {
-    background: #1d4ed8;
-}
-
-QPushButton#toolBtn {
-    background-color: #ffffff;
-    color: #475569;
-    border: 1px solid #e2e8f0;
-    border-radius: 9px;
-    padding: 7px 16px;
-    font-size: 12px;
-    font-weight: 500;
-}
-QPushButton#toolBtn:hover {
-    background-color: #f8fafc;
-    border-color: #cbd5e1;
-    color: #1e293b;
-}
-QPushButton#toolBtn:pressed {
-    background-color: #f1f5f9;
-}
-QPushButton#toolBtn:disabled {
-    background-color: #f1f5f9;
-    border-color: #e2e8f0;
-    color: #cbd5e1;
-}
-
-/* ── 进度条 ──────────────────────────────────── */
-QProgressBar#globalProgress {
-    background-color: #e2e8f0;
-    border: none;
-    border-radius: 0px;
-    height: 3px;
-    text-align: center;
-    color: transparent;
-    font-size: 0px;
-}
-QProgressBar#globalProgress::chunk {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #3b82f6, stop:1 #60a5fa);
-    border-radius: 0px;
-}
-
-/* ── 主体区域 ────────────────────────────────── */
-QWidget#bodyWidget {
-    background-color: #f1f4f8;
-}
-
-/* ── 侧边栏 ──────────────────────────────────── */
-QWidget#sidebar {
-    background: transparent;
-    min-width: 230px;
-    max-width: 280px;
-}
-QLabel#sidebarTitle {
-    color: #0f172a;
-    font-size: 13px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-}
-QLabel#countBadge {
-    background-color: #dbeafe;
-    color: #2563eb;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 2px 10px;
-    border-radius: 10px;
-    min-width: 20px;
-    text-align: center;
-}
-QLabel#sidebarFooter {
-    font-size: 11px;
-    color: #cbd5e1;
-    text-align: center;
-    padding: 4px 0px;
-}
-
-/* ── 主题列表 ────────────────────────────────── */
-QListWidget#themeList {
-    background-color: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    padding: 8px;
-    outline: none;
-}
-QListWidget#themeList::item {
-    background-color: transparent;
-    border-radius: 12px;
-    padding: 0px;
-    margin: 3px 0px;
-    border: 1.5px solid transparent;
-    min-height: 64px;
-}
-QListWidget#themeList::item:selected {
-    background-color: #eff6ff;
-    border: 1.5px solid #3b82f6;
-}
-QListWidget#themeList::item:hover:!selected {
-    background-color: #f8fafc;
-    border: 1.5px solid #e2e8f0;
-}
-
-/* ── 内容面板 ────────────────────────────────── */
-QWidget#contentPanel {
-    background: transparent;
-}
-
-/* ── 主题信息栏 ──────────────────────────────── */
-QWidget#themeInfoBar {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-}
-QLabel#themeInfoIcon {
-    background-color: #eff6ff;
-    border-radius: 12px;
-}
-QLabel#themeInfoTitle {
-    font-size: 18px;
-    font-weight: 700;
-    color: #0f172a;
-}
-QLabel#themeInfoMeta {
-    font-size: 12px;
-    color: #64748b;
-    font-weight: 400;
-}
-QLabel#themeInfoTag {
-    font-size: 11px;
-    color: #3b82f6;
-    font-weight: 600;
-    background: #eff6ff;
-    border-radius: 8px;
-    padding: 3px 10px;
-}
-
-/* ── 主操作按钮 (应用) ──────────────────────── */
-QPushButton#applyBtn {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #3b82f6, stop:1 #2563eb);
-    color: white;
-    border: none;
-    border-radius: 10px;
-    padding: 10px 28px;
-    font-size: 13px;
-    font-weight: 600;
-}
-QPushButton#applyBtn:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #2563eb, stop:1 #1d4ed8);
-}
-QPushButton#applyBtn:disabled {
-    background-color: #cbd5e1;
-    color: #94a3b8;
-}
-
-/* ── 次要按钮 ────────────────────────────────── */
-QPushButton#installBtn {
-    background-color: #ffffff;
-    color: #3b82f6;
-    border: 1.5px solid #3b82f6;
-    border-radius: 9px;
-    padding: 8px 22px;
-    font-size: 13px;
-    font-weight: 600;
-}
-QPushButton#installBtn:hover {
-    background-color: #eff6ff;
-}
-QPushButton#installBtn:disabled {
-    border-color: #cbd5e1;
-    color: #94a3b8;
-    background: transparent;
-}
-
-/* ── 危险/删除按钮 ───────────────────────────── */
-QPushButton#dangerBtn {
-    background-color: transparent;
-    color: #ef4444;
-    border: 1px solid #fecaca;
-    border-radius: 9px;
-    padding: 8px 18px;
-    font-size: 12px;
-    font-weight: 600;
-}
-QPushButton#dangerBtn:hover {
-    background-color: #fef2f2;
-    border-color: #ef4444;
-}
-
-/* ── 预览滚动区 ──────────────────────────────── */
-QScrollArea#previewScroll {
-    border: none;
-    background: transparent;
-}
-QWidget#previewContainer {
-    background-color: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-}
-
-/* ── 状态栏 ──────────────────────────────────── */
-QStatusBar {
-    background-color: #ffffff;
-    color: #64748b;
-    border-top: 1px solid #e2e8f0;
-    font-size: 12px;
-    padding: 3px 16px;
-}
-
-/* ── 菜单栏 ──────────────────────────────────── */
-QMenuBar {
-    background-color: transparent;
-    color: #64748b;
-    border: none;
-    font-size: 13px;
-    padding: 2px 0px;
-}
-QMenuBar::item:selected {
-    background-color: #f1f5f9;
-    border-radius: 6px;
-    color: #0f172a;
-}
-QMenu {
-    background-color: #ffffff;
-    color: #0f172a;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 6px;
-}
-QMenu::item {
-    padding: 8px 28px 8px 16px;
-    border-radius: 6px;
-}
-QMenu::item:selected {
-    background-color: #eff6ff;
-    color: #2563eb;
-}
-QMenu::separator {
-    height: 1px;
-    background: #f1f5f9;
-    margin: 4px 8px;
-}
-
-/* ── 滚动条 ──────────────────────────────────── */
-QScrollBar:vertical {
-    background: transparent;
-    width: 8px;
-    border-radius: 4px;
-    margin: 2px 0;
-}
-QScrollBar::handle:vertical {
-    background: #cbd5e1;
-    border-radius: 4px;
-    min-height: 30px;
-}
-QScrollBar::handle:vertical:hover {
-    background: #94a3b8;
-}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    height: 0px;
-}
-QScrollBar:horizontal {
-    background: transparent;
-    height: 8px;
-    border-radius: 4px;
-    margin: 0 2px;
-}
-QScrollBar::handle:horizontal {
-    background: #cbd5e1;
-    border-radius: 4px;
-    min-width: 30px;
-}
-QScrollBar::handle:horizontal:hover {
-    background: #94a3b8;
-}
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-    width: 0px;
-}
-
-/* ── 分割线 ──────────────────────────────────── */
-QFrame#colorCard {
-    border-radius: 8px;
-    border: 1px solid rgba(0,0,0,0.06);
-}
-QSplitter::handle {
-    background: #e2e8f0;
-}
-QSplitter::handle:horizontal {
-    width: 1px;
-}
-
-/* ── 空状态 ──────────────────────────────────── */
-QLabel#emptyState {
-    color: #94a3b8;
-    font-size: 14px;
-}
-QLabel#emptyStateIcon {
-    font-size: 48px;
-    color: #cbd5e1;
-}
-
-/* ════════════════════════════════════════════════════
-   Tab 栏
-   ════════════════════════════════════════════════════ */
-QTabWidget#mainTabs::pane {
-    border: none;
-    background: transparent;
-}
-QTabBar#mainTabs::tab {
-    background: transparent;
-    color: #94a3b8;
-    padding: 12px 32px;
-    font-size: 14px;
-    font-weight: 600;
-    border: none;
-    border-bottom: 3px solid transparent;
-    margin-bottom: 0px;
-}
-QTabBar#mainTabs::tab:selected {
-    color: #2563eb;
-    border-bottom: 3px solid #3b82f6;
-}
-QTabBar#mainTabs::tab:hover:!selected {
-    color: #475569;
-}
-
-/* ════════════════════════════════════════════════════
-   在线素材库 — 卡片
-   ════════════════════════════════════════════════════ */
-QFrame#packCard {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-}
-QFrame#packCard:hover {
-    border: 1.5px solid #3b82f6;
-    background: #ffffff;
-}
-QLabel#packTitle {
-    font-size: 14px;
-    font-weight: 700;
-    color: #0f172a;
-}
-QLabel#packMeta {
-    font-size: 11px;
-    color: #94a3b8;
-    font-weight: 400;
-}
-QLabel#packPreview {
-    background: #f8fafc;
-    border: 1px solid #f1f5f9;
-    border-radius: 12px;
-}
-QLabel#packDateTag {
-    font-size: 10px;
-    color: #64748b;
-    font-weight: 500;
-    background: #f1f5f9;
-    border-radius: 6px;
-    padding: 2px 8px;
-}
-QLabel#installedBadge {
-    background: #dbeafe;
-    color: #2563eb;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 10px;
-    border-radius: 10px;
-}
-QLabel#categoryTag {
-    font-size: 10px;
-    color: #0f172a;
-    font-weight: 600;
-    background: #f1f5f9;
-    border-radius: 6px;
-    padding: 2px 8px;
-}
-QLabel#skeleton {
-    background: #f1f5f9;
-    border-radius: 8px;
-}
-
-/* ── 在线库按钮 ──────────────────────────────── */
-QPushButton#downloadBtn {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #3b82f6, stop:1 #2563eb);
-    color: white;
-    border: none;
-    border-radius: 9px;
-    padding: 7px 18px;
-    font-size: 12px;
-    font-weight: 600;
-}
-QPushButton#downloadBtn:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-        stop:0 #2563eb, stop:1 #1d4ed8);
-}
-QPushButton#downloadBtn:pressed {
-    background: #1d4ed8;
-}
-QPushButton#downloadBtn:disabled {
-    background-color: #e2e8f0;
-    color: #94a3b8;
-}
-
-QPushButton#applyOnlineBtn {
-    background-color: #ffffff;
-    color: #3b82f6;
-    border: 1.5px solid #3b82f6;
-    border-radius: 9px;
-    padding: 6px 18px;
-    font-size: 12px;
-    font-weight: 600;
-}
-QPushButton#applyOnlineBtn:hover {
-    background-color: #eff6ff;
-    border-color: #2563eb;
-    color: #2563eb;
-}
-QPushButton#applyOnlineBtn:disabled {
-    border-color: #e2e8f0;
-    color: #cbd5e1;
-    background: transparent;
-}
-
-/* ── 在线库搜索框 ────────────────────────────── */
-QLineEdit#searchInput {
-    padding: 9px 14px 9px 36px;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    font-size: 13px;
-    background-color: #ffffff;
-    color: #0f172a;
-}
-QLineEdit#searchInput:focus {
-    border: 1.5px solid #3b82f6;
-}
-QLineEdit#searchInput::placeholder {
-    color: #cbd5e1;
-}
-
-/* ── 在线库页码标签 ──────────────────────────── */
-QLabel#pageLabel {
-    color: #475569;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 0 16px;
-}
-QLabel#pageTotal {
-    color: #94a3b8;
-    font-size: 12px;
-    font-weight: 500;
-}
-
-/* ── 筛选标签 ──────────────────────────────────── */
-QPushButton#filterTag {
-    background: #ffffff;
-    color: #64748b;
-    border: 1px solid #e2e8f0;
-    border-radius: 16px;
-    padding: 6px 14px;
-    font-size: 12px;
-    font-weight: 500;
-}
-QPushButton#filterTag:hover {
-    border-color: #3b82f6;
-    color: #3b82f6;
-}
-QPushButton#filterTag:checked {
-    background: #3b82f6;
-    color: #ffffff;
-    border-color: #3b82f6;
-}
-
-/* ── 分页跳转框 ───────────────────────────────── */
-QLineEdit#pageInput {
-    padding: 6px 8px;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    font-size: 12px;
-    background: #ffffff;
-    color: #0f172a;
-    max-width: 50px;
-    text-align: center;
-}
-QLineEdit#pageInput:focus {
-    border: 1.5px solid #3b82f6;
-}
-"""
+    /* ── 纯正传统桌面原生风格 (Classic Desktop GUI) ── */
+    * {
+        font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+        font-size: 9pt;
+    }
+    QMainWindow, QWidget {
+        background-color: #f0f0f0;
+        color: #000000;
+    }
+    QToolBar {
+        background-color: #f0f0f0;
+        border-bottom: 1px solid #d4d4d4;
+        padding: 2px;
+    }
+    QListWidget {
+        background-color: #ffffff;
+        border: 1px solid #828790;
+    }
+    QListWidget::item {
+        padding: 4px;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    QListWidget::item:selected {
+        background-color: #0078d7;
+        color: #ffffff;
+    }
+    QListWidget::item:hover:!selected {
+        background-color: #e5f1fb;
+    }
+    QPushButton {
+        background-color: #e1e1e1;
+        border: 1px solid #adadad;
+        padding: 4px 12px;
+        border-radius: 0px;
+        min-height: 22px;
+    }
+    QPushButton:hover {
+        background-color: #e5f1fb;
+        border-color: #0078d7;
+    }
+    QPushButton:pressed {
+        background-color: #cce4f7;
+        border-color: #005499;
+    }
+    QPushButton:disabled {
+        background-color: #f0f0f0;
+        border-color: #cccccc;
+        color: #a0a0a0;
+    }
+    QLineEdit {
+        border: 1px solid #828790;
+        padding: 2px 4px;
+        background: #ffffff;
+    }
+    QLineEdit:focus {
+        border-color: #0078d7;
+    }
+    QTabWidget::pane {
+        border: 1px solid #828790;
+        background-color: #ffffff;
+        top: -1px;
+    }
+    QTabBar::tab {
+        background: #f0f0f0;
+        border: 1px solid #828790;
+        padding: 4px 12px;
+        margin-right: 2px;
+    }
+    QTabBar::tab:selected {
+        background: #ffffff;
+        border-bottom-color: #ffffff;
+    }
+    QSplitter::handle {
+        background-color: #d4d4d4;
+        width: 1px;
+    }
+    QScrollArea {
+        border: 1px solid #828790;
+        background: #ffffff;
+    }
+    QFrame#packCard {
+        background-color: #ffffff;
+        border: 1px solid #d4d4d4;
+    }
+    QFrame#packCard:hover {
+        border-color: #0078d7;
+        background-color: #f3f9ff;
+    }
+    """
 
 # ── 在线素材库：后台线程 ────────────────────────────────────────
 
@@ -720,7 +265,7 @@ class PackCard(QFrame):
         self._preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._preview_label.setText("加载中...")
         self._preview_label.setStyleSheet(
-            "QLabel#packPreview { color: #cbd5e1; font-size: 12px; }"
+            "color: #8a9bb0; font-size: 12px;"
         )
         layout.addWidget(self._preview_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
@@ -831,8 +376,8 @@ class OnlineLibraryPanel(QWidget):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(28, 20, 28, 16)
-        layout.setSpacing(14)
+        layout.setContentsMargins(4, 8, 4, 4)
+        layout.setSpacing(6)
 
         # ── 顶部标题栏 ──
         header_bar = QHBoxLayout()
@@ -843,46 +388,24 @@ class OnlineLibraryPanel(QWidget):
         header_left.setSpacing(2)
 
         title = QLabel("在线素材库")
-        title.setStyleSheet(
-            "font-size: 20px; font-weight: 700; color: #0f172a; "
-            "letter-spacing: 0.5px;"
-        )
+        title.setObjectName("onlineTitle")
         header_left.addWidget(title)
 
         self._count_label = QLabel("从致美化实时获取")
-        self._count_label.setStyleSheet("color: #94a3b8; font-size: 12px;")
+        self._count_label.setObjectName("onlineCount")
         header_left.addWidget(self._count_label)
 
         header_bar.addLayout(header_left)
         header_bar.addStretch()
 
-        # 搜索框 (带图标)
-        search_container = QWidget()
-        search_container.setFixedWidth(260)
-        search_layout = QHBoxLayout(search_container)
-        search_layout.setContentsMargins(0, 0, 0, 0)
-        search_layout.setSpacing(0)
-
-        search_icon = QLabel("🔍")
-        search_icon.setFixedSize(34, 38)
-        search_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        search_icon.setStyleSheet("color: #94a3b8; font-size: 14px; background: transparent; border: none;")
-        search_layout.addWidget(search_icon)
-
+        # 搜索框
         self._search_input = QLineEdit()
         self._search_input.setObjectName("searchInput")
-        self._search_input.setPlaceholderText("搜索光标包名称...")
-        self._search_input.setStyleSheet(
-            "QLineEdit#searchInput { padding: 8px 14px 8px 0px; "
-            "border: 1px solid #e2e8f0; border-radius: 10px; "
-            "font-size: 13px; background: #ffffff; color: #0f172a; }"
-            "QLineEdit#searchInput:focus { border: 1.5px solid #3b82f6; }"
-            "QLineEdit#searchInput::placeholder { color: #cbd5e1; }"
-        )
-        self._search_input.textChanged.connect(self._on_search)
-        search_layout.addWidget(self._search_input)
+        self._search_input.setPlaceholderText("🔍  搜索光标包名称...")
 
-        header_bar.addWidget(search_container)
+        self._search_input.textChanged.connect(self._on_search)
+
+        header_bar.addWidget(self._search_input)
 
         # 刷新按钮
         refresh_btn = QPushButton("刷新")
@@ -922,18 +445,14 @@ class OnlineLibraryPanel(QWidget):
 
         # ── 状态标签 ──
         self._status_label = QLabel("正在加载...")
-        self._status_label.setStyleSheet(
-            "color: #94a3b8; font-size: 12px; padding: 2px 4px;"
-        )
+        self._status_label.setObjectName("onlineStatus")
         layout.addWidget(self._status_label)
 
         # ── 光标包网格 (滚动) ──
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(
-            "QScrollArea { background: transparent; border: none; }"
-        )
+
 
         self._grid_container = QWidget()
         self._grid_layout = QGridLayout(self._grid_container)
@@ -948,7 +467,7 @@ class OnlineLibraryPanel(QWidget):
         self._empty_state = QWidget()
         empty_layout = QVBoxLayout(self._empty_state)
         empty_layout.setContentsMargins(0, 40, 0, 40)
-        empty_icon = QLabel("🖱️")
+        empty_icon = QLabel("")
         empty_icon.setObjectName("emptyStateIcon")
         empty_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         empty_layout.addWidget(empty_icon)
@@ -961,10 +480,7 @@ class OnlineLibraryPanel(QWidget):
 
         # ── 分页栏 ──
         page_bar_widget = QWidget()
-        page_bar_widget.setStyleSheet(
-            "QWidget { background: #ffffff; border: 1px solid #e2e8f0; "
-            "border-radius: 12px; }"
-        )
+        page_bar_widget.setObjectName("pageBarWidget")
         page_bar = QHBoxLayout(page_bar_widget)
         page_bar.setContentsMargins(16, 8, 16, 8)
         page_bar.setSpacing(12)
@@ -1053,6 +569,9 @@ class OnlineLibraryPanel(QWidget):
 
     def _fetch_packs(self):
         """获取当前页的光标包列表."""
+        if self._fetch_thread and self._fetch_thread.isRunning():
+            self._status_label.setText("正在加载，请等待当前请求完成")
+            return
         self._progress.setVisible(True)
         self._status_label.setText(f"正在加载第 {self._current_page} 页...")
         self._prev_btn.setEnabled(False)
@@ -1066,6 +585,7 @@ class OnlineLibraryPanel(QWidget):
         self._fetch_thread.packs_ready.connect(self._on_packs_ready)
         self._fetch_thread.progress.connect(self._on_fetch_progress)
         self._fetch_thread.error.connect(self._on_fetch_error)
+        self._fetch_thread.finished.connect(self._fetch_thread.deleteLater)
         self._fetch_thread.start()
 
     def _clear_cards(self):
@@ -1239,7 +759,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.theme_manager = theme_manager
         self._current_theme = None
-        self._download_thread: Optional[DownloadPackThread] = None
+        self._download_threads: dict[str, DownloadPackThread] = {}
         self._online_panel: Optional[OnlineLibraryPanel] = None
 
         self.setWindowTitle(f"{__app_name__} v{__version__}")
@@ -1292,56 +812,20 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
 
         main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(4, 4, 4, 4)
+        main_layout.setSpacing(4)
 
-        # ===== 顶部导航条 =====
-        nav_bar = QWidget()
-        nav_bar.setObjectName("navBar")
-        nav_layout = QHBoxLayout(nav_bar)
-        nav_layout.setContentsMargins(24, 0, 24, 0)
-        nav_layout.setSpacing(0)
+        # ===== 原生桌面工具栏 =====
+        toolbar = self.addToolBar("常用操作")
+        toolbar.setMovable(False)
 
-        # 品牌区
-        brand_layout = QHBoxLayout()
-        brand_layout.setSpacing(12)
+        self.backup_btn = QAction("备份系统光标", self)
+        self.backup_btn.triggered.connect(self._backup_cursors)
+        toolbar.addAction(self.backup_btn)
 
-        brand_icon = QLabel("\U0001F5B1")  # 鼠标 emoji
-        brand_icon.setObjectName("appLogo")
-        brand_icon.setStyleSheet("font-size: 26px;")
-        brand_layout.addWidget(brand_icon)
-
-        title_col = QVBoxLayout()
-        title_col.setSpacing(1)
-        title = QLabel("CursorVault")
-        title.setObjectName("appTitle")
-        sub = QLabel("\u5f00\u6e90\u9f20\u6807\u5149\u6807\u4e3b\u9898\u7ba1\u7406\u4e0e\u66ff\u6362\u5de5\u5177")
-        sub.setObjectName("appSubtitle")
-        title_col.addWidget(title)
-        title_col.addWidget(sub)
-        brand_layout.addLayout(title_col)
-
-        nav_layout.addLayout(brand_layout)
-        nav_layout.addStretch()
-
-        # 工具栏
-        tool_bar = QWidget()
-        tool_bar_layout = QHBoxLayout(tool_bar)
-        tool_bar_layout.setContentsMargins(0, 0, 0, 0)
-        tool_bar_layout.setSpacing(10)
-
-        self.backup_btn = QPushButton("备份系统光标")
-        self.backup_btn.setObjectName("toolBtn")
-        self.backup_btn.clicked.connect(self._backup_cursors)
-        tool_bar_layout.addWidget(self.backup_btn)
-
-        self.import_btn = QPushButton("导入自定义")
-        self.import_btn.setObjectName("toolBtn")
-        self.import_btn.clicked.connect(self._import_cursors)
-        tool_bar_layout.addWidget(self.import_btn)
-
-        nav_layout.addWidget(tool_bar)
-        main_layout.addWidget(nav_bar)
+        self.import_btn = QAction("导入自定义...", self)
+        self.import_btn.triggered.connect(self._import_cursors)
+        toolbar.addAction(self.import_btn)
 
         # ===== 进度条 =====
         self.progress_bar = QProgressBar()
@@ -1364,15 +848,15 @@ class MainWindow(QMainWindow):
         # --- Tab 1: 本地主题 ---
         local_tab = QWidget()
         local_layout = QHBoxLayout(local_tab)
-        local_layout.setContentsMargins(24, 20, 24, 20)
-        local_layout.setSpacing(24)
+        local_layout.setContentsMargins(4, 4, 4, 4)
+        local_layout.setSpacing(4)
 
         # 左侧边栏
         sidebar = QWidget()
         sidebar.setObjectName("sidebar")
         sidebar_layout = QVBoxLayout(sidebar)
         sidebar_layout.setContentsMargins(0, 0, 0, 0)
-        sidebar_layout.setSpacing(12)
+        sidebar_layout.setSpacing(16)
 
         sidebar_header_w = QWidget()
         sidebar_header_layout = QHBoxLayout(sidebar_header_w)
@@ -1390,33 +874,13 @@ class MainWindow(QMainWindow):
         sidebar_header_layout.addStretch()
         sidebar_layout.addWidget(sidebar_header_w)
 
-        # 搜索框（带图标）
-        search_container = QWidget()
-        search_layout = QHBoxLayout(search_container)
-        search_layout.setContentsMargins(0, 0, 0, 0)
-        search_layout.setSpacing(0)
-
-        search_icon = QLabel("🔍")
-        search_icon.setFixedSize(34, 38)
-        search_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        search_icon.setStyleSheet(
-            "color: #94a3b8; font-size: 14px; background: transparent; border: none;"
-        )
-        search_layout.addWidget(search_icon)
-
+        # 搜索框 — 使用 CSS padding-left 实现图标效果
         self._local_search = QLineEdit()
         self._local_search.setObjectName("searchInput")
-        self._local_search.setPlaceholderText("搜索本地主题...")
-        self._local_search.setStyleSheet(
-            "QLineEdit#searchInput { padding: 8px 14px 8px 0px; "
-            "border: 1px solid #e2e8f0; border-radius: 10px; "
-            "font-size: 13px; background: #ffffff; color: #0f172a; }"
-            "QLineEdit#searchInput:focus { border: 1.5px solid #3b82f6; }"
-            "QLineEdit#searchInput::placeholder { color: #cbd5e1; }"
-        )
+        self._local_search.setPlaceholderText("🔍  搜索本地主题...")
+
         self._local_search.textChanged.connect(self._on_local_search)
-        search_layout.addWidget(self._local_search)
-        sidebar_layout.addWidget(search_container)
+        sidebar_layout.addWidget(self._local_search)
 
         self.theme_list = QListWidget()
         self.theme_list.setObjectName("themeList")
@@ -1425,11 +889,6 @@ class MainWindow(QMainWindow):
         self.theme_list.currentRowChanged.connect(self._on_theme_selected)
         sidebar_layout.addWidget(self.theme_list)
 
-        sidebar_footer = QLabel("点击主题预览详细内容")
-        sidebar_footer.setObjectName("sidebarFooter")
-        sidebar_layout.addWidget(sidebar_footer)
-
-        local_layout.addWidget(sidebar, 240)
 
         # 右侧内容区
         content_panel = QWidget()
@@ -1437,6 +896,12 @@ class MainWindow(QMainWindow):
         content_layout = QVBoxLayout(content_panel)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(16)
+
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(sidebar)
+        splitter.addWidget(content_panel)
+        splitter.setStretchFactor(1, 1)
+        local_layout.addWidget(splitter)
 
         # 主题信息栏
         self.theme_info_bar = QWidget()
@@ -1523,7 +988,7 @@ class MainWindow(QMainWindow):
         preview_scroll.setWidget(preview_container)
         content_layout.addWidget(preview_scroll)
 
-        local_layout.addWidget(content_panel, 1)
+
 
         self._tabs.addTab(local_tab, "本地主题")
 
@@ -1638,13 +1103,11 @@ class MainWindow(QMainWindow):
         else:
             self.theme_icon_label.clear()
             self.theme_icon_label.setText("🖱️")
-            self.theme_icon_label.setStyleSheet(
-                "QLabel#themeInfoIcon { font-size: 24px; color: #3b82f6; }"
-            )
+
 
         # 更新元信息
         installed_count = len(theme.cursor_files) if theme.cursor_files else 0
-        total_count = 15
+        total_count = 15 # CursorType enum count
         complete = theme.is_complete()
 
         self.theme_meta_label.setText(
@@ -1731,7 +1194,10 @@ class MainWindow(QMainWindow):
         self.apply_btn.setEnabled(False)
 
         try:
-            system_cursor_api.apply_theme(self._current_theme.cursor_files)
+            results = system_cursor_api.apply_theme(self._current_theme.cursor_files)
+            failed = [ct.value for ct, success in results.items() if not success]
+            if failed:
+                raise RuntimeError(f"以下游标未能应用：{', '.join(failed)}")
             self.status_bar.showMessage(f"已应用: {self._current_theme.display_name}")
             QMessageBox.information(self, "应用成功", f"主题「{self._current_theme.display_name}」已应用到系统游标")
         except Exception as e:
@@ -1748,9 +1214,9 @@ class MainWindow(QMainWindow):
             return
 
         import_path = Path(dir_path)
-        cur_files = list(import_path.glob("*.cur"))
+        cur_files = find_cursor_files(import_path)
         if not cur_files:
-            QMessageBox.warning(self, "导入失败", "所选目录中没有 .cur 文件")
+            QMessageBox.warning(self, "导入失败", "所选目录中没有 .cur 或 .ani 文件")
             return
 
         # 让用户输入主题名称
@@ -1763,14 +1229,18 @@ class MainWindow(QMainWindow):
         name = name.strip()
 
         # 通过 theme_manager 导入
-        theme = self.theme_manager.import_cur_directory(name, import_path)
+        try:
+            theme = self.theme_manager.import_cur_directory(name, import_path)
+        except ValueError as exc:
+            QMessageBox.warning(self, "主题名称无效", str(exc))
+            return
         if not theme:
             QMessageBox.warning(
                 self, "导入失败",
                 "无法识别目录中的游标文件。\n"
                 "请确保文件名包含以下关键字之一：\n"
                 "arrow, help, wait, crosshair, ibeam, pen, no, "
-                "hand, sizeall, sizenesw, sizens, sizenwse, sizewe"
+                "hand, uparrow, sizeall, sizenesw, sizens, sizenwse, sizewe"
             )
             return
 
@@ -1848,6 +1318,13 @@ class MainWindow(QMainWindow):
 
     def _download_pack(self, pack: ZhutixPack):
         """下载并安装在线光标包."""
+        if any(thread.isRunning() for thread in self._download_threads.values()):
+            self.status_bar.showMessage("已有下载任务正在进行，请等待完成后再试")
+            if self._online_panel and pack.slug in self._online_panel._cards:
+                card = self._online_panel._cards[pack.slug]
+                card._download_btn.setText("下载安装")
+                card._download_btn.setEnabled(True)
+            return
         download_dir = self.theme_manager.download_dir
 
         self.progress_bar.setVisible(True)
@@ -1855,20 +1332,23 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.status_bar.showMessage(f"正在下载: {pack.title}...")
 
-        self._download_thread = DownloadPackThread(
+        thread = DownloadPackThread(
             ZhutixClient(),
             pack,
             download_dir,
             self.theme_manager,
         )
-        self._download_thread.progress.connect(self._on_download_progress)
-        self._download_thread.extract_signal.connect(
+        self._download_threads[pack.slug] = thread
+        thread.progress.connect(self._on_download_progress)
+        thread.extract_signal.connect(
             lambda msg: self.status_bar.showMessage(msg)
         )
-        self._download_thread.finished_signal.connect(
+        thread.finished_signal.connect(
             lambda ok, msg, p: self._on_download_finished(ok, msg, p)
         )
-        self._download_thread.start()
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: self._download_threads.pop(pack.slug, None))
+        thread.start()
 
     def _on_download_progress(self, downloaded: int, total: int):
         """下载进度回调."""
@@ -1915,7 +1395,10 @@ class MainWindow(QMainWindow):
 
         self.status_bar.showMessage("正在应用游标主题...")
         try:
-            system_cursor_api.apply_theme(theme.cursor_files)
+            results = system_cursor_api.apply_theme(theme.cursor_files)
+            failed = [ct.value for ct, success in results.items() if not success]
+            if failed:
+                raise RuntimeError(f"以下游标未能应用：{', '.join(failed)}")
             self.status_bar.showMessage(f"已应用: {theme.display_name}")
             QMessageBox.information(
                 self, "应用成功",

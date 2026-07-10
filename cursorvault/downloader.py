@@ -10,12 +10,11 @@
 
 from __future__ import annotations
 
-import re
 import shutil
 import zipfile
 import subprocess
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional
 
 from .models import CursorType
 
@@ -23,6 +22,8 @@ from .models import CursorType
 # 游标文件名 -> CursorType 的映射规则
 # 致美化光标包的文件命名有一定规律
 CURSOR_FILE_PATTERNS: list[tuple[CursorType, list[str]]] = [
+    (CursorType.UPARROW,     ["uparrow", "cur14", "14"]),
+    (CursorType.HAND,        ["pointerlink", "hand", "link", "cur15", "15"]),
     (CursorType.ARROW,       ["arrow", "normal", "select", "pointer", "default", "cur01", "01"]),
     (CursorType.HELP,        ["help", "cur02", "02"]),
     (CursorType.APPSTARTING, ["appstarting", "app_starting", "working", "cur03", "03"]),
@@ -36,8 +37,6 @@ CURSOR_FILE_PATTERNS: list[tuple[CursorType, list[str]]] = [
     (CursorType.SIZENS,      ["sizens", "ns", "vertical", "cur11", "11"]),
     (CursorType.SIZENWSE,    ["sizenwse", "nwse", "diagonal", "cur12", "12"]),
     (CursorType.SIZEWE,      ["sizewe", "we", "horizontal", "ew", "cur13", "13"]),
-    (CursorType.UPARROW,     ["uparrow", "up", "cur14", "14"]),
-    (CursorType.HAND,        ["hand", "link", "pointer_link", "cur15", "15"]),
 ]
 
 
@@ -67,32 +66,33 @@ def match_cursor_type(filename: str) -> Optional[CursorType]:
     """
     name = filename.lower().replace(" ", "").replace("_", "").replace("-", "")
 
-    for cursor_type, keywords in CURSOR_FILE_PATTERNS:
-        for kw in keywords:
-            if kw in name:
-                return cursor_type
-
-    # 尝试匹配 Windows 标准游标文件名
+    # Windows' standard names are exact identifiers; check these before the
+    # broader substring rules below.
     win_names = {
-        "aero_arrow": CursorType.ARROW,
-        "aero_helpsel": CursorType.HELP,
-        "aero_working": CursorType.APPSTARTING,
-        "aero_busy": CursorType.WAIT,
-        "aero_cross": CursorType.CROSSHAIR,
-        "aero_ibeam": CursorType.IBEAM,
-        "aero_pen": CursorType.PEN,
-        "aero_unavail": CursorType.NO,
-        "aero_move": CursorType.SIZEALL,
-        "aero_up": CursorType.UPARROW,
-        "aero_link": CursorType.HAND,
-        "aero_nesw": CursorType.SIZENESW,
-        "aero_ns": CursorType.SIZENS,
-        "aero_nwse": CursorType.SIZENWSE,
-        "aero_ew": CursorType.SIZEWE,
+        "aeroarrow": CursorType.ARROW,
+        "aerohelpsel": CursorType.HELP,
+        "aeroworking": CursorType.APPSTARTING,
+        "aerobusy": CursorType.WAIT,
+        "aerocross": CursorType.CROSSHAIR,
+        "aeroibeam": CursorType.IBEAM,
+        "aeropen": CursorType.PEN,
+        "aerounavail": CursorType.NO,
+        "aeromove": CursorType.SIZEALL,
+        "aeroup": CursorType.UPARROW,
+        "aerolink": CursorType.HAND,
+        "aeronesw": CursorType.SIZENESW,
+        "aerons": CursorType.SIZENS,
+        "aeronwse": CursorType.SIZENWSE,
+        "aeroew": CursorType.SIZEWE,
     }
     for win_name, ct in win_names.items():
         if win_name in name:
             return ct
+
+    for cursor_type, keywords in CURSOR_FILE_PATTERNS:
+        for kw in keywords:
+            if kw in name:
+                return cursor_type
 
     return None
 
@@ -132,6 +132,17 @@ def _find_extractor(name: str) -> Optional[str]:
     return None
 
 
+def _safe_member_path(dest_dir: Path, member_name: str) -> bool:
+    """Reject archive members that would escape the extraction directory."""
+    normalized = member_name.replace("\\", "/")
+    if not normalized or normalized.startswith("/") or ":" in normalized.split("/")[0]:
+        return False
+    try:
+        return (dest_dir / normalized).resolve().is_relative_to(dest_dir.resolve())
+    except OSError:
+        return False
+
+
 def extract_archive(archive_path: Path, dest_dir: Path) -> bool:
     """解压压缩包到目标目录.
 
@@ -143,6 +154,8 @@ def extract_archive(archive_path: Path, dest_dir: Path) -> bool:
     if suffix == ".zip":
         try:
             with zipfile.ZipFile(archive_path, "r") as zf:
+                if not all(_safe_member_path(dest_dir, info.filename) for info in zf.infolist()):
+                    return False
                 zf.extractall(dest_dir)
             return True
         except (zipfile.BadZipFile, Exception):
@@ -157,6 +170,8 @@ def extract_archive(archive_path: Path, dest_dir: Path) -> bool:
             if unrar:
                 rarfile.UNRAR_TOOL = unrar
             rf = rarfile.RarFile(str(archive_path))
+            if not all(_safe_member_path(dest_dir, info.filename) for info in rf.infolist()):
+                return False
             rf.extractall(str(dest_dir))
             return True
         except ImportError:
@@ -164,24 +179,16 @@ def extract_archive(archive_path: Path, dest_dir: Path) -> bool:
         except Exception:
             pass
 
-        # 方案 2: 尝试 unrar 命令行
+        # 方案 2: use the command line extractor only after validating member paths.
         unrar = _find_extractor("unrar")
         if unrar:
             try:
+                import rarfile
+                rf = rarfile.RarFile(str(archive_path))
+                if not all(_safe_member_path(dest_dir, info.filename) for info in rf.infolist()):
+                    return False
                 result = subprocess.run(
                     [unrar, "x", "-y", str(archive_path), str(dest_dir) + "\\"],
-                    capture_output=True, timeout=120,
-                )
-                return result.returncode == 0
-            except Exception:
-                pass
-
-        # 方案 3: 尝试 7za
-        sevenz = _find_extractor("7za") or _find_extractor("7z")
-        if sevenz:
-            try:
-                result = subprocess.run(
-                    [sevenz, "x", "-y", f"-o{dest_dir}", str(archive_path)],
                     capture_output=True, timeout=120,
                 )
                 return result.returncode == 0
@@ -195,22 +202,12 @@ def extract_archive(archive_path: Path, dest_dir: Path) -> bool:
         try:
             import py7zr
             with py7zr.SevenZipFile(str(archive_path), mode="r") as z:
+                if not all(_safe_member_path(dest_dir, info.filename) for info in z.list()):
+                    return False
                 z.extractall(str(dest_dir))
             return True
         except (ImportError, Exception):
             pass
-
-        # 方案 2: 7za 命令行
-        sevenz = _find_extractor("7za") or _find_extractor("7z")
-        if sevenz:
-            try:
-                result = subprocess.run(
-                    [sevenz, "x", "-y", f"-o{dest_dir}", str(archive_path)],
-                    capture_output=True, timeout=120,
-                )
-                return result.returncode == 0
-            except Exception:
-                pass
 
     return False
 
@@ -252,9 +249,12 @@ def install_pack_from_archive(
     installed: dict[CursorType, Path] = {}
 
     for ct, src_path in cursor_map.items():
-        dst = theme_dir / f"{ct.value}.cur"
+        suffix = src_path.suffix.lower()
+        dst = theme_dir / f"{ct.value}{suffix}"
         try:
             shutil.copy2(src_path, dst)
+            alternate = theme_dir / f"{ct.value}{'.ani' if suffix == '.cur' else '.cur'}"
+            alternate.unlink(missing_ok=True)
             installed[ct] = dst
         except Exception:
             pass

@@ -28,25 +28,76 @@ def _get_cur_pixmap(
     cursor_file: Optional[Path],
     size: int = 64,
 ) -> Optional[QPixmap]:
-    """从 .cur 文件加载为 QPixmap."""
+    """通过 Win32 API 渲染 .cur 和 .ani 文件为 QPixmap."""
     if not cursor_file or not cursor_file.exists():
         return None
+
     try:
-        from PIL import Image
-        img = Image.open(str(cursor_file))
-        # .cur 文件的 PNG 数据
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        buf.seek(0)
-        qimg = QImage.fromData(buf.read(), "PNG")
-        if qimg.isNull():
+        import win32gui
+        import win32con
+        import ctypes
+        import struct
+
+        path = str(cursor_file)
+
+        # Win32 LoadImage 会在文件不存在时抛出异常，但我们在前面已经拦截了
+        flags = win32con.LR_LOADFROMFILE | win32con.LR_DEFAULTSIZE
+        try:
+            hcursor = win32gui.LoadImage(0, path, win32con.IMAGE_CURSOR, 0, 0, flags)
+        except Exception:
             return None
-        return QPixmap.fromImage(qimg).scaled(
+
+        if not hcursor:
+            return None
+
+        # 获取光标的实际物理尺寸
+        info = win32gui.GetIconInfo(hcursor)
+        bmp_info = win32gui.GetObject(info[3])
+        actual_width = bmp_info.bmWidth
+        actual_height = bmp_info.bmHeight
+        if info[4] == 0:  # 如果是黑白掩码，高度是两倍
+            actual_height = actual_height // 2
+
+        # 使用实际尺寸创建画布
+        img = QImage(actual_width, actual_height, QImage.Format.Format_ARGB32_Premultiplied)
+        img.fill(0) # 填充为全透明
+
+        hdc = win32gui.GetDC(0)
+        memdc = win32gui.CreateCompatibleDC(hdc)
+
+        bmi = ctypes.create_string_buffer(40 + 12)
+        ctypes.memmove(bmi, struct.pack("LllHHLLllLL", 40, actual_width, -actual_height, 1, 32, 0, 0, 0, 0, 0, 0), 40)
+
+        ppvBits = ctypes.c_void_p()
+        hbitmap = ctypes.windll.gdi32.CreateDIBSection(memdc, bmi, 0, ctypes.byref(ppvBits), None, 0)
+
+        old_bmp = win32gui.SelectObject(memdc, hbitmap)
+
+        # 将光标绘制到内存 DC (不拉伸)
+        win32gui.DrawIconEx(memdc, 0, 0, hcursor, actual_width, actual_height, 0, 0, win32con.DI_NORMAL)
+
+        # 将像素数据拷贝到 QImage
+        ctypes.memmove(int(img.bits()), ppvBits.value, actual_width * actual_height * 4)
+
+        win32gui.SelectObject(memdc, old_bmp)
+        win32gui.DeleteObject(hbitmap)
+        win32gui.DeleteDC(memdc)
+        win32gui.ReleaseDC(0, hdc)
+        win32gui.DestroyIcon(hcursor)
+        win32gui.DeleteObject(info[3])
+        if info[4]: win32gui.DeleteObject(info[4])
+
+        if img.isNull():
+            return None
+
+        # 最后，将实际大小的图片平滑缩放到 UI 要求的尺寸
+        return QPixmap.fromImage(img).scaled(
             size, size,
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         )
-    except Exception:
+    except Exception as e:
+        print(f"Error loading cursor {cursor_file}: {e}")
         return None
 
 
@@ -93,6 +144,7 @@ class AnimatedCursorLabel(QLabel):
 
 # ---------- 单个游标卡片 ----------
 
+from PyQt6.QtWidgets import QGraphicsDropShadowEffect
 class CursorCard(QFrame):
     """单个游标类型的预览卡片 — 现代圆角风格."""
 
@@ -112,10 +164,29 @@ class CursorCard(QFrame):
                 padding: 6px;
             }
             CursorCard:hover {
-                background: #f8fafc;
-                border: 1.5px solid #3b82f6;
+                background: #f4f9ff;
+                border: 1.5px solid #4a90d9;
             }
         """)
+
+        # 添加精美阴影
+        self._shadow = QGraphicsDropShadowEffect(self)
+        self._shadow.setBlurRadius(10)
+        self._shadow.setColor(QColor(0, 0, 0, 10))
+        self._shadow.setOffset(0, 2)
+        self.setGraphicsEffect(self._shadow)
+
+    def enterEvent(self, event):
+        self._shadow.setBlurRadius(20)
+        self._shadow.setColor(QColor(0, 0, 0, 20))
+        self._shadow.setOffset(0, 6)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._shadow.setBlurRadius(10)
+        self._shadow.setColor(QColor(0, 0, 0, 10))
+        self._shadow.setOffset(0, 2)
+        super().leaveEvent(event)
 
     def set_pixmap(self, pixmap: Optional[QPixmap]):
         self._pixmap = pixmap
@@ -139,7 +210,7 @@ class CursorCard(QFrame):
 
         # 绘制名称
         name = CURSOR_CHINESE_NAMES.get(self.cursor_type, self.cursor_type.value)
-        painter.setPen(QColor("#475569"))
+        painter.setPen(QColor("#546e7a"))
         font = QFont("Microsoft YaHei UI", 8)
         font.setWeight(QFont.Weight.Medium)
         painter.setFont(font)
@@ -178,14 +249,14 @@ class CursorGridPanel(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
+        layout.setSpacing(8)
 
         # 大预览区域
         self._large_label = QLabel()
         self._large_label.setFixedSize(160, 160)
         self._large_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._large_label.setStyleSheet("""
-            background: #f8f9fc;
+            background: #ffffff;
             border: 1px solid #e4e9f0;
             border-radius: 12px;
         """)
@@ -199,7 +270,7 @@ class CursorGridPanel(QWidget):
         # 游标名称标签
         self._type_name_label = QLabel("标准选择")
         self._type_name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._type_name_label.setStyleSheet("color: #37474f; font-size: 14px; font-weight: 600;")
+        self._type_name_label.setStyleSheet("color: #1a2332; font-size: 14px; font-weight: 600;")
         self._type_name_label.setVisible(False)
 
         layout.addLayout(large_wrapper)
@@ -211,14 +282,14 @@ class CursorGridPanel(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet("""
             QScrollArea { background: transparent; border: none; }
-            QScrollBar:vertical { width: 6px; background: #f0f2f5; }
-            QScrollBar::handle:vertical { background: #c5cdd8; border-radius: 3px; }
+            QScrollBar:vertical { width: 6px; background: #e4e9f0; border-radius: 3px; }
+            QScrollBar::handle:vertical { background: #b0bec5; border-radius: 3px; }
         """)
 
         grid_widget = QWidget()
         self._grid_layout = QGridLayout(grid_widget)
         self._grid_layout.setSpacing(8)
-        self._grid_layout.setContentsMargins(4, 4, 4, 4)
+        self._grid_layout.setContentsMargins(8, 8, 8, 8)
 
         scroll.setWidget(grid_widget)
         layout.addWidget(scroll)
@@ -310,9 +381,16 @@ class ThemeCard(QFrame):
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self._update_style()
 
+        # 添加轻微阴影
+        self._shadow = QGraphicsDropShadowEffect(self)
+        self._shadow.setBlurRadius(10)
+        self._shadow.setColor(QColor(0, 0, 0, 10))
+        self._shadow.setOffset(0, 2)
+        self.setGraphicsEffect(self._shadow)
+
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(12)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
 
         # 颜色指示器
         self._color_dot = QFrame()
@@ -326,14 +404,14 @@ class ThemeCard(QFrame):
 
         # 文字信息
         text_layout = QVBoxLayout()
-        text_layout.setSpacing(2)
+        text_layout.setSpacing(4)
 
         self._name_label = QLabel(display_name)
-        self._name_label.setStyleSheet("color: #eee; font-size: 13px; font-weight: bold;")
+        self._name_label.setStyleSheet("color: #1a2332; font-size: 13px; font-weight: bold;")
         text_layout.addWidget(self._name_label)
 
         self._desc_label = QLabel(description)
-        self._desc_label.setStyleSheet("color: #888; font-size: 10px;")
+        self._desc_label.setStyleSheet("color: #8a9bb0; font-size: 10px;")
         self._desc_label.setWordWrap(True)
         self._desc_label.setMaximumHeight(32)
         text_layout.addWidget(self._desc_label)
@@ -346,13 +424,27 @@ class ThemeCard(QFrame):
         layout.addWidget(self._status_label)
         self._update_status()
 
+    def enterEvent(self, event):
+        if not self._selected:
+            self._shadow.setBlurRadius(20)
+            self._shadow.setColor(QColor(0, 0, 0, 20))
+            self._shadow.setOffset(0, 6)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        if not self._selected:
+            self._shadow.setBlurRadius(10)
+            self._shadow.setColor(QColor(0, 0, 0, 10))
+            self._shadow.setOffset(0, 2)
+        super().leaveEvent(event)
+
     def _update_style(self):
         if self._selected:
             self.setStyleSheet("""
                 ThemeCard {
-                    background: #2a2a4a;
-                    border: 1px solid #5a5a8a;
-                    border-radius: 10px;
+                    background: #f4f9ff;
+                    border: 1.5px solid #4a90d9;
+                    border-radius: 8px;
                 }
             """)
         else:
@@ -412,7 +504,7 @@ class ThemeListPanel(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
+        layout.setSpacing(8)
 
         # 标题
         title = QLabel("🎨 主题列表")
@@ -425,14 +517,14 @@ class ThemeListPanel(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet("""
             QScrollArea { background: transparent; border: none; }
-            QScrollBar:vertical { width: 6px; background: #f0f2f5; }
-            QScrollBar::handle:vertical { background: #c5cdd8; border-radius: 3px; }
+            QScrollBar:vertical { width: 6px; background: #e4e9f0; border-radius: 3px; }
+            QScrollBar::handle:vertical { background: #b0bec5; border-radius: 3px; }
         """)
 
         scroll_widget = QWidget()
         self._card_layout = QVBoxLayout(scroll_widget)
-        self._card_layout.setSpacing(6)
-        self._card_layout.setContentsMargins(4, 4, 4, 4)
+        self._card_layout.setSpacing(8)
+        self._card_layout.setContentsMargins(8, 8, 8, 8)
         self._card_layout.addStretch()
 
         scroll.setWidget(scroll_widget)
@@ -504,7 +596,7 @@ class CursorGalleryWidget(QWidget):
         large_container = QFrame()
         large_container.setStyleSheet("""
             QFrame {
-                background: #f8fafc;
+                background: #ffffff;
                 border: 1px solid #e4e9f0;
                 border-radius: 16px;
                 padding: 10px;
@@ -524,7 +616,7 @@ class CursorGalleryWidget(QWidget):
         self._type_name_label = QLabel("标准选择")
         self._type_name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._type_name_label.setStyleSheet(
-            "color: #2563eb; font-size: 15px; font-weight: 700; background: transparent;"
+            "color: #4a90d9; font-size: 15px; font-weight: 700; background: transparent;"
         )
         self._type_name_label.setVisible(False)
         large_container_layout.addWidget(self._type_name_label)
@@ -536,7 +628,7 @@ class CursorGalleryWidget(QWidget):
         # 标题区域
         header = QLabel(f"  {theme.display_name} — 共 {len(theme.cursor_files)} 个光标")
         header.setStyleSheet(
-            "color: #64748b; font-size: 13px; padding: 4px 8px; font-weight: 500;"
+            "color: #546e7a; font-size: 13px; padding: 4px 8px; font-weight: 500;"
         )
         layout.addWidget(header)
 
@@ -546,13 +638,13 @@ class CursorGalleryWidget(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setStyleSheet("""
             QScrollArea { background: transparent; border: none; }
-            QScrollBar:vertical { width: 6px; background: #f0f2f5; }
-            QScrollBar::handle:vertical { background: #c5cdd8; border-radius: 3px; }
+            QScrollBar:vertical { width: 6px; background: #e4e9f0; border-radius: 3px; }
+            QScrollBar::handle:vertical { background: #b0bec5; border-radius: 3px; }
         """)
 
         grid_widget = QWidget()
         grid = QGridLayout(grid_widget)
-        grid.setSpacing(12)
+        grid.setSpacing(8)
         grid.setContentsMargins(8, 8, 8, 8)
 
         self._cards: dict[CursorType, CursorCard] = {}
@@ -600,7 +692,7 @@ class CursorGalleryWidget(QWidget):
             self._large_label.clear()
             self._large_label.setText("🖱️")
             self._large_label.setStyleSheet(
-                "color: #cbd5e1; font-size: 48px; background: transparent; border: none;"
+                "color: #b0bec5; font-size: 48px; background: transparent; border: none;"
             )
 
         name = CURSOR_CHINESE_NAMES.get(cursor_type, cursor_type.value)
