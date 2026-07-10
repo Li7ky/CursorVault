@@ -20,7 +20,9 @@ Thumbs.db
 
 # ── Binaries ────────────────────────────────────
 *.exe
-!cursorvault/bin/*.exe
+*.dll
+*.so
+*.dylib
 
 # ── Project-specific ────────────────────────────
 # debug/temp files
@@ -29,9 +31,11 @@ test_enc.txt
 run_with_log.bat
 debug_start.bat
 
-# generated test dirs
+# generated/test dirs
 cursorvault/themes/themes/
 cursorvault/themes/generated/
+cursorvault/bin/
+cursorvault/themes/downloads/
 
 # 抓包数据 (network captures)
 抓包数据/
@@ -39,6 +43,6 @@ cursorvault/themes/generated/
 # backup reg files
 backup/*.reg
 
-# downloads
+# downloaded theme archives (keep gitkeep only)
 themes/downloads/*
 !themes/downloads/.gitkeep
