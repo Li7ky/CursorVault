@@ -1,24 +1,19 @@
-"""CursorVault 入口."""
+"""CursorVault 入口.
+
+通过 python -m cursorvault 启动时使用此入口。
+实际启动逻辑委托给 app.py 中的 run() 函数，
+确保样式表、图标等配置一致。
+"""
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from PyQt6.QtWidgets import QApplication
-
-from .main_window import MainWindow
-from .theme_manager import ThemeManager
+from .app import run
 
 
-def main() -> int:
-    import sys
-    app = QApplication(sys.argv)
-    base_dir = Path(__file__).resolve().parent.parent
-    theme_manager = ThemeManager(base_dir)
-    window = MainWindow(theme_manager)
-    window.show()
-    return app.exec()
+def main() -> None:
+    """启动 CursorVault."""
+    run()
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

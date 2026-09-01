@@ -39,7 +39,10 @@ from PyQt6.QtWidgets import (
     QToolBar,
     QSizePolicy,
     QButtonGroup,
+    QDialog,
+    QDialogButtonBox,
 )
+from PyQt6.QtGui import QFont
 from PyQt6.QtNetwork import (
     QNetworkAccessManager,
     QNetworkRequest,
@@ -56,6 +59,229 @@ from .zhutix_client import ZhutixClient, ZhutixPack
 from .ui_theme import APP_STYLESHEET
 from .models import CursorType, CURSOR_CHINESE_NAMES
 from .updater import GitHubUpdater, ReleaseInfo, is_newer
+
+
+# ── 美化的更新提示对话框 ────────────────────────────────────────
+
+class UpdateDialog(QDialog):
+    """美化的更新提示对话框，与应用风格一致."""
+
+    def __init__(self, current_version: str, new_version: str, release_notes: str = "", parent=None):
+        super().__init__(parent)
+        self.setObjectName("customDialog")
+        self.setWindowTitle("发现新版本")
+        self.setFixedSize(480, 360)
+        self.setWindowFlags(
+            Qt.WindowType.Dialog | Qt.WindowType.WindowCloseButtonHint
+        )
+
+        self._setup_ui(current_version, new_version, release_notes)
+
+    def _setup_ui(self, current_version: str, new_version: str, release_notes: str) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setSpacing(16)
+
+        # ── 顶部：图标 + 标题 ──
+        header = QHBoxLayout()
+        header.setSpacing(16)
+
+        # 图标
+        icon_label = QLabel("⬆")
+        icon_label.setObjectName("dialogIcon")
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setStyleSheet(
+            """
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                stop:0 #3b82f6, stop:1 #2563eb);
+            color: #ffffff;
+            border-radius: 24px;
+            font-size: 24px;
+            font-weight: 700;
+            """
+        )
+        header.addWidget(icon_label)
+
+        # 标题和版本
+        title_col = QVBoxLayout()
+        title_col.setSpacing(4)
+
+        title_label = QLabel("发现新版本")
+        title_label.setObjectName("dialogTitle")
+        title_col.addWidget(title_label)
+
+        version_row = QHBoxLayout()
+        version_row.setSpacing(8)
+        current_tag = QLabel(f"v{current_version}")
+        current_tag.setStyleSheet(
+            "color: #94a3b8; font-size: 12px; text-decoration: line-through;"
+        )
+        version_row.addWidget(current_tag)
+
+        arrow_label = QLabel("→")
+        arrow_label.setStyleSheet("color: #64748b; font-size: 12px;")
+        version_row.addWidget(arrow_label)
+
+        new_tag = QLabel(f"v{new_version}")
+        new_tag.setObjectName("dialogVersion")
+        version_row.addWidget(new_tag)
+        version_row.addStretch()
+        title_col.addLayout(version_row)
+
+        header.addLayout(title_col, 1)
+        layout.addLayout(header)
+
+        # ── 提示文字 ──
+        message_label = QLabel(
+            "新版本已发布，建议更新以获得更好的体验。\n"
+            "更新后将包含新功能、修复和改进。"
+        )
+        message_label.setObjectName("dialogMessage")
+        message_label.setWordWrap(True)
+        layout.addWidget(message_label)
+
+        # ── 更新说明 ──
+        if release_notes:
+            notes_title = QLabel("📋 更新说明")
+            notes_title.setStyleSheet("color: #334155; font-weight: 600; font-size: 12px;")
+            layout.addWidget(notes_title)
+
+            notes_text = QLabel(release_notes[:300] + ("…" if len(release_notes) > 300 else ""))
+            notes_text.setObjectName("releaseNotes")
+            notes_text.setWordWrap(True)
+            notes_text.setMinimumHeight(60)
+            notes_text.setMaximumHeight(120)
+            layout.addWidget(notes_text)
+
+        layout.addStretch()
+
+        # ── 底部按钮 ──
+        button_row = QHBoxLayout()
+        button_row.addStretch()
+
+        later_btn = QPushButton("稍后再说")
+        later_btn.setObjectName("dialogSecondaryBtn")
+        later_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        later_btn.clicked.connect(self.reject)
+        button_row.addWidget(later_btn)
+
+        update_btn = QPushButton("立即更新")
+        update_btn.setObjectName("dialogPrimaryBtn")
+        update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        update_btn.clicked.connect(self.accept)
+        button_row.addWidget(update_btn)
+
+        layout.addLayout(button_row)
+
+
+# ── 顶部通知横幅 ───────────────────────────────────────────────
+
+class NotificationBanner(QFrame):
+    """顶部通知横幅，用于显示更新提示等全局通知."""
+
+    closed = pyqtSignal()
+    action_clicked = pyqtSignal()
+
+    def __init__(self, message: str = "", action_text: str = "", parent=None):
+        super().__init__(parent)
+        self.setObjectName("notificationBanner")
+        self._message = message
+        self._action_text = action_text
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        self.setFixedHeight(48)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(20, 0, 16, 0)
+        layout.setSpacing(12)
+
+        # 图标容器（带圆形背景）
+        icon_container = QWidget()
+        icon_container.setFixedSize(32, 32)
+        icon_container.setStyleSheet(
+            "background: rgba(255, 255, 255, 0.2); border-radius: 16px;"
+        )
+        icon_layout = QHBoxLayout(icon_container)
+        icon_layout.setContentsMargins(0, 0, 0, 0)
+        icon_label = QLabel("⬆")
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setStyleSheet(
+            "color: #ffffff; font-size: 16px; font-weight: 700; background: transparent;"
+        )
+        icon_layout.addWidget(icon_label)
+        layout.addWidget(icon_container)
+
+        # 消息文本
+        self._message_label = QLabel(self._message)
+        self._message_label.setStyleSheet(
+            "color: #ffffff; font-size: 13px; font-weight: 500; background: transparent;"
+        )
+        self._message_label.setWordWrap(True)
+        layout.addWidget(self._message_label, 1)
+
+        # 操作按钮
+        if self._action_text:
+            self._action_btn = QPushButton(self._action_text)
+            self._action_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._action_btn.setStyleSheet(
+                """
+                QPushButton {
+                    background: #ffffff;
+                    border: none;
+                    color: #4f46e5;
+                    font-weight: 600;
+                    padding: 6px 20px;
+                    border-radius: 8px;
+                    font-size: 12px;
+                }
+                QPushButton:hover {
+                    background: #f0f0ff;
+                }
+                QPushButton:pressed {
+                    background: #e0e0ff;
+                }
+                """
+            )
+            self._action_btn.clicked.connect(self.action_clicked.emit)
+            layout.addWidget(self._action_btn)
+
+        # 关闭按钮
+        close_btn = QPushButton("✕")
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setFixedSize(24, 24)
+        close_btn.setStyleSheet(
+            """
+            QPushButton {
+                background: transparent;
+                border: none;
+                color: rgba(255, 255, 255, 0.7);
+                font-size: 14px;
+                font-weight: 600;
+                border-radius: 12px;
+            }
+            QPushButton:hover {
+                background: rgba(255, 255, 255, 0.2);
+                color: #ffffff;
+            }
+            """
+        )
+        close_btn.clicked.connect(self._on_close)
+        layout.addWidget(close_btn)
+
+    def _on_close(self) -> None:
+        self.hide()
+        self.closed.emit()
+
+    def set_message(self, message: str) -> None:
+        self._message = message
+        self._message_label.setText(message)
+
+    def set_action_text(self, text: str) -> None:
+        self._action_text = text
+        if hasattr(self, "_action_btn"):
+            self._action_btn.setText(text)
+
 
 # ── 在线素材库：后台线程 ────────────────────────────────────────
 
@@ -459,44 +685,64 @@ class OnlineLibraryPanel(QWidget):
 
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 6, 10, 10)
-        layout.setSpacing(8)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(12)
 
-        # ── 顶栏：标题 | 分段筛选 | 搜索 + 刷新 ──
+        # ── 头部卡片 ──
         header = QWidget()
         header.setObjectName("onlineHeaderCard")
         header_layout = QVBoxLayout(header)
-        header_layout.setContentsMargins(14, 12, 14, 12)
-        header_layout.setSpacing(10)
+        header_layout.setContentsMargins(20, 16, 20, 16)
+        header_layout.setSpacing(14)
 
-        top_row = QHBoxLayout()
-        top_row.setSpacing(12)
+        # ── 第一行：标题 + 刷新按钮 ──
+        title_row = QHBoxLayout()
+        title_row.setSpacing(12)
 
-        title_col = QVBoxLayout()
-        title_col.setSpacing(2)
+        # 标题区域
+        title_icon = QLabel("🌐")
+        title_icon.setStyleSheet("font-size: 24px;")
+        title_row.addWidget(title_icon)
+
+        title_text_col = QVBoxLayout()
+        title_text_col.setSpacing(0)
         title = QLabel("在线素材库")
         title.setObjectName("onlineTitle")
-        title_col.addWidget(title)
+        title_text_col.addWidget(title)
         self._count_label = QLabel("加载中…")
         self._count_label.setObjectName("onlineCount")
-        title_col.addWidget(self._count_label)
-        top_row.addLayout(title_col, 0)
-        top_row.addStretch(1)
+        title_text_col.addWidget(self._count_label)
+        title_row.addLayout(title_text_col, 0)
 
-        # 互斥分段筛选（QButtonGroup，一次只能选一个）
+        title_row.addStretch()
+
+        # 刷新按钮
+        refresh_btn = QPushButton("🔄 刷新")
+        refresh_btn.setObjectName("refreshBtn")
+        refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        refresh_btn.clicked.connect(self._fetch_packs)
+        title_row.addWidget(refresh_btn)
+
+        header_layout.addLayout(title_row)
+
+        # ── 第二行：筛选器 + 搜索框 ──
+        control_row = QHBoxLayout()
+        control_row.setSpacing(12)
+
+        # 分段筛选器
         segment = QFrame()
         segment.setObjectName("filterSegment")
         seg_layout = QHBoxLayout(segment)
-        seg_layout.setContentsMargins(4, 4, 4, 4)
-        seg_layout.setSpacing(0)
+        seg_layout.setContentsMargins(3, 3, 3, 3)
+        seg_layout.setSpacing(2)
 
         self._filter_group = QButtonGroup(self)
         self._filter_group.setExclusive(True)
         self._filter_buttons: dict[str, QPushButton] = {}
         filter_defs = [
-            ("latest", "最新发布", "按发布日期从新到旧"),
-            ("hot", "近期更新", "按最近修改时间"),
-            ("all", "全部", "按条目 ID 排列"),
+            ("latest", "🔥 最新", "按发布日期从新到旧"),
+            ("hot", "⭐ 热门", "按最近修改时间"),
+            ("all", "📋 全部", "按条目 ID 排列"),
         ]
         for i, (key, label, tip) in enumerate(filter_defs):
             btn = QPushButton(label)
@@ -505,30 +751,30 @@ class OnlineLibraryPanel(QWidget):
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setToolTip(tip)
             btn.setProperty("filterKey", key)
-            btn.setMinimumWidth(84)
+            btn.setMinimumWidth(80)
+            btn.setMinimumHeight(30)
             self._filter_group.addButton(btn, i)
             self._filter_buttons[key] = btn
             seg_layout.addWidget(btn)
         self._filter_buttons["latest"].setChecked(True)
         self._filter_group.idClicked.connect(self._on_filter_id_clicked)
-        top_row.addWidget(segment, 0)
+        control_row.addWidget(segment, 0)
 
+        control_row.addStretch()
+
+        # 搜索框
         self._search_input = QLineEdit()
         self._search_input.setObjectName("searchInput")
-        self._search_input.setPlaceholderText("搜索本页名称…")
+        self._search_input.setPlaceholderText("🔍 搜索素材…")
         self._search_input.setClearButtonEnabled(True)
-        self._search_input.setFixedWidth(220)
+        self._search_input.setMinimumHeight(34)
+        self._search_input.setMinimumWidth(200)
         self._search_input.textChanged.connect(self._on_search_text)
-        top_row.addWidget(self._search_input)
+        control_row.addWidget(self._search_input)
 
-        refresh_btn = QPushButton("刷新")
-        refresh_btn.setObjectName("toolBtn")
-        refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        refresh_btn.clicked.connect(self._fetch_packs)
-        top_row.addWidget(refresh_btn)
+        header_layout.addLayout(control_row)
 
-        header_layout.addLayout(top_row)
-
+        # ── 状态栏 ──
         status_row = QHBoxLayout()
         self._status_label = QLabel("正在加载…")
         self._status_label.setObjectName("onlineStatus")
@@ -1073,8 +1319,9 @@ class MainWindow(QMainWindow):
         self._preview_widget: Optional[CursorGalleryWidget] = None
 
         self.setWindowTitle(f"{__app_name__} v{__version__}")
-        self.setMinimumSize(1120, 740)
-        self.resize(1280, 820)
+        # 采用专业桌面应用的宽屏基准，同时允许在较小窗口中完整缩放。
+        self.setMinimumSize(980, 640)
+        self.resize(1240, 800)
         self.setStyleSheet(APP_STYLESHEET)
         self._update_thread: Optional[QThread] = None
         self._pending_manual_update_check = False
@@ -1143,104 +1390,169 @@ class MainWindow(QMainWindow):
         central.setObjectName("centralWidget")
         self.setCentralWidget(central)
 
+        # ── 主布局 ──
         main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(14, 10, 14, 10)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        toolbar = QToolBar("常用操作")
-        toolbar.setMovable(False)
-        toolbar.setIconSize(QSize(16, 16))
-        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-        self.addToolBar(toolbar)
+        # ── 顶部工具栏区域 ──
+        top_area = QWidget()
+        top_area.setObjectName("topArea")
+        top_area.setMinimumHeight(64)
+        top_area.setMaximumHeight(72)
+        top_layout = QHBoxLayout(top_area)
+        top_layout.setContentsMargins(16, 8, 16, 8)
+        top_layout.setSpacing(8)
 
-        self.backup_btn = QAction("备份系统光标", self)
-        self.backup_btn.triggered.connect(self._backup_cursors)
-        toolbar.addAction(self.backup_btn)
+        # Logo和标题
+        logo_label = QLabel("🖱️")
+        logo_label.setStyleSheet("font-size: 24px;")
+        top_layout.addWidget(logo_label)
 
-        self.import_btn = QAction("导入自定义…", self)
-        self.import_btn.triggered.connect(self._import_cursors)
-        toolbar.addAction(self.import_btn)
+        app_title = QLabel("CursorVault")
+        app_title.setObjectName("appTitle")
+        top_layout.addWidget(app_title)
 
+        version_label = QLabel(f"v{__version__}")
+        version_label.setObjectName("versionLabel")
+        top_layout.addWidget(version_label)
+
+        top_layout.addSpacing(20)
+
+        # 工具栏按钮
+        self.backup_btn = QPushButton("💾 备份")
+        self.backup_btn.setObjectName("toolbarBtn")
+        self.backup_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.backup_btn.clicked.connect(self._backup_cursors)
+        top_layout.addWidget(self.backup_btn)
+
+        self.import_btn = QPushButton("📂 导入")
+        self.import_btn.setObjectName("toolbarBtn")
+        self.import_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.import_btn.clicked.connect(self._import_cursors)
+        top_layout.addWidget(self.import_btn)
+
+        top_layout.addStretch()
+
+        # 检查更新按钮
+        self.update_btn = QPushButton("🔄 检查更新")
+        self.update_btn.setObjectName("toolbarBtnSecondary")
+        self.update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.update_btn.clicked.connect(self._check_update_manual)
+        top_layout.addWidget(self.update_btn)
+
+        main_layout.addWidget(top_area)
+
+        # ── 顶部通知横幅（用于更新提示等）──
+        self._notification_banner = NotificationBanner(parent=self)
+        self._notification_banner.setVisible(False)
+        self._notification_banner.action_clicked.connect(self._on_banner_action_clicked)
+        self._notification_banner.closed.connect(self._on_banner_closed)
+        main_layout.addWidget(self._notification_banner)
+
+        # ── 进度条（在横幅下方，下载/更新时显示）──
         self.progress_bar = QProgressBar()
         self.progress_bar.setObjectName("globalProgress")
         self.progress_bar.setVisible(False)
         self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFixedHeight(4)
+        self.progress_bar.setFixedHeight(3)
         main_layout.addWidget(self.progress_bar)
 
-        body_widget = QWidget()
-        body_layout = QVBoxLayout(body_widget)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(0)
-
+        # ── 标签页区域 ──
         self._tabs = QTabWidget()
         self._tabs.setObjectName("mainTabs")
         self._tabs.setDocumentMode(True)
         self._tabs.setMovable(False)
 
-        # --- 本地主题 ---
+        # --- 本地主题标签页 ---
         local_tab = QWidget()
         local_layout = QHBoxLayout(local_tab)
-        local_layout.setContentsMargins(2, 4, 2, 2)
-        local_layout.setSpacing(12)
+        local_layout.setContentsMargins(20, 16, 20, 20)
+        local_layout.setSpacing(20)
 
+        # 左侧边栏
         sidebar = QWidget()
         sidebar.setObjectName("sidebar")
         sidebar.setMinimumWidth(240)
-        sidebar.setMaximumWidth(340)
+        sidebar.setMaximumWidth(300)
         sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(14, 14, 14, 14)
-        sidebar_layout.setSpacing(10)
+        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setSpacing(12)
 
-        sidebar_header_w = QWidget()
-        sidebar_header_layout = QHBoxLayout(sidebar_header_w)
-        sidebar_header_layout.setContentsMargins(0, 0, 0, 0)
-        sidebar_title = QLabel("主题列表")
+        # 侧边栏头部
+        sidebar_header = QWidget()
+        sidebar_header.setObjectName("sidebarHeader")
+        sidebar_header_layout = QHBoxLayout(sidebar_header)
+        sidebar_header_layout.setContentsMargins(16, 12, 16, 12)
+        sidebar_header_layout.setSpacing(8)
+
+        sidebar_icon = QLabel("🎨")
+        sidebar_icon.setStyleSheet("font-size: 18px;")
+        sidebar_header_layout.addWidget(sidebar_icon)
+
+        sidebar_title = QLabel("我的主题")
         sidebar_title.setObjectName("sidebarTitle")
         sidebar_header_layout.addWidget(sidebar_title)
+
+        sidebar_header_layout.addStretch()
+
         self.theme_count_badge = QLabel("0")
         self.theme_count_badge.setObjectName("countBadge")
         sidebar_header_layout.addWidget(self.theme_count_badge)
-        sidebar_header_layout.addStretch()
-        sidebar_layout.addWidget(sidebar_header_w)
 
+        sidebar_layout.addWidget(sidebar_header)
+
+        # 搜索框
+        search_container = QWidget()
+        search_layout = QHBoxLayout(search_container)
+        search_layout.setContentsMargins(16, 0, 16, 0)
         self._local_search = QLineEdit()
         self._local_search.setObjectName("searchInput")
-        self._local_search.setPlaceholderText("搜索本地主题…")
+        self._local_search.setPlaceholderText("🔍 搜索主题…")
         self._local_search.setClearButtonEnabled(True)
+        self._local_search.setMinimumHeight(36)
         self._local_search.textChanged.connect(self._on_local_search)
-        sidebar_layout.addWidget(self._local_search)
+        search_layout.addWidget(self._local_search)
+        sidebar_layout.addWidget(search_container)
 
+        # 主题列表
         self.theme_list = QListWidget()
         self.theme_list.setObjectName("themeList")
-        self.theme_list.setIconSize(QSize(40, 40))
-        self.theme_list.setSpacing(2)
+        self.theme_list.setIconSize(QSize(36, 36))
+        self.theme_list.setSpacing(4)
         self.theme_list.setUniformItemSizes(True)
+        self.theme_list.setMinimumHeight(200)
         self.theme_list.currentRowChanged.connect(self._on_theme_selected)
         sidebar_layout.addWidget(self.theme_list, 1)
 
-        self._local_empty = QLabel("还没有本地主题\n可从在线库安装，或导入自定义目录")
+        # 空状态提示
+        self._local_empty = QLabel("📭\n还没有本地主题\n\n可从在线库安装\n或导入自定义目录")
         self._local_empty.setObjectName("emptyState")
         self._local_empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._local_empty.setVisible(False)
         sidebar_layout.addWidget(self._local_empty)
 
+        local_layout.addWidget(sidebar)
+
+        # 右侧内容区
         content_panel = QWidget()
         content_panel.setObjectName("contentPanel")
         content_layout = QVBoxLayout(content_panel)
         content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(12)
+        content_layout.setSpacing(14)
 
+        # 主题信息栏
         self.theme_info_bar = QWidget()
         self.theme_info_bar.setObjectName("themeInfoBar")
         self.theme_info_bar.setVisible(False)
         info_layout = QHBoxLayout(self.theme_info_bar)
-        info_layout.setContentsMargins(16, 14, 16, 14)
+        info_layout.setContentsMargins(18, 16, 18, 16)
         info_layout.setSpacing(14)
 
         self.theme_icon_label = QLabel()
         self.theme_icon_label.setObjectName("themeInfoIcon")
-        self.theme_icon_label.setFixedSize(56, 56)
+        self.theme_icon_label.setMinimumSize(52, 52)
+        self.theme_icon_label.setMaximumSize(64, 64)
         self.theme_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         info_layout.addWidget(self.theme_icon_label)
 
@@ -1271,48 +1583,54 @@ class MainWindow(QMainWindow):
         action_layout.setContentsMargins(0, 0, 0, 0)
         action_layout.setSpacing(8)
 
-        self.apply_btn = QPushButton("应用到系统")
+        self.apply_btn = QPushButton("✨ 应用到系统")
         self.apply_btn.setObjectName("applyBtn")
         self.apply_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.apply_btn.setMinimumHeight(36)
         self.apply_btn.clicked.connect(self._apply_theme)
         self.apply_btn.setEnabled(False)
         action_layout.addWidget(self.apply_btn)
 
-        self._open_source_btn = QPushButton("来源网页")
+        self._open_source_btn = QPushButton("🔗 来源")
         self._open_source_btn.setObjectName("toolBtn")
         self._open_source_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._open_source_btn.setMinimumHeight(36)
         self._open_source_btn.clicked.connect(self._open_theme_source)
         self._open_source_btn.setVisible(False)
         action_layout.addWidget(self._open_source_btn)
 
-        self._delete_theme_btn = QPushButton("删除")
+        self._delete_theme_btn = QPushButton("🗑️ 删除")
         self._delete_theme_btn.setObjectName("dangerBtn")
         self._delete_theme_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._delete_theme_btn.setMinimumHeight(36)
         self._delete_theme_btn.clicked.connect(self._delete_current_theme)
         self._delete_theme_btn.setVisible(False)
         action_layout.addWidget(self._delete_theme_btn)
 
-        info_layout.addWidget(action_row)
+        # 操作区固定在右侧，窗口缩放时不会挤压主题标题和元信息。
+        action_row.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
+        info_layout.addWidget(action_row, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         content_layout.addWidget(self.theme_info_bar)
 
-        # 单一滚动区（画廊内部不再嵌套滚动）
+        # 预览区域
         self.preview_scroll = QScrollArea()
         self.preview_scroll.setObjectName("previewScroll")
         self.preview_scroll.setWidgetResizable(True)
         self.preview_scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.preview_scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
         )
         self.preview_container = QWidget()
         self.preview_container.setObjectName("previewInner")
         self.preview_layout = QVBoxLayout(self.preview_container)
-        self.preview_layout.setContentsMargins(8, 8, 8, 8)
+        self.preview_layout.setContentsMargins(0, 0, 0, 0)
         self.preview_layout.setSpacing(0)
         self.preview_scroll.setWidget(self.preview_container)
         content_layout.addWidget(self.preview_scroll, 1)
 
+        # 空状态占位
         self._preview_placeholder = QLabel(
-            "选择左侧主题以预览光标\n或切换到「在线素材库」下载新主题"
+            "🖱️\n\n选择一个主题开始预览\n\n或切换到「在线素材库」下载新主题"
         )
         self._preview_placeholder.setObjectName("emptyState")
         self._preview_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1321,24 +1639,16 @@ class MainWindow(QMainWindow):
         )
         self.preview_layout.addWidget(self._preview_placeholder)
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        splitter.addWidget(sidebar)
-        splitter.addWidget(content_panel)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setSizes([280, 900])
-        splitter.setHandleWidth(10)
-        local_layout.addWidget(splitter)
+        local_layout.addWidget(content_panel, 1)
 
-        self._tabs.addTab(local_tab, "  本地主题  ")
+        self._tabs.addTab(local_tab, "本地主题")
 
         self._online_panel = OnlineLibraryPanel(self.theme_manager)
         self._online_panel.pack_download_requested.connect(self._download_pack)
         self._online_panel.pack_apply_requested.connect(self._apply_online_pack)
-        self._tabs.addTab(self._online_panel, "  在线素材库  ")
+        self._tabs.addTab(self._online_panel, "在线素材库")
 
-        body_layout.addWidget(self._tabs)
-        main_layout.addWidget(body_widget, 1)
+        main_layout.addWidget(self._tabs, 1)
 
     def _setup_status_bar(self) -> None:
         self.status_bar = QStatusBar()
@@ -1845,7 +2155,7 @@ class MainWindow(QMainWindow):
             # 启动静默：无更新不弹窗
             if silent:
                 return
-            # 手动检查：弹窗提示已是最新（不提「云端版本」）
+            # 手动检查：弹窗提示已是最新
             QMessageBox.information(
                 self,
                 "检查更新",
@@ -1853,24 +2163,25 @@ class MainWindow(QMainWindow):
             )
             return
 
-        # 有可更新版本：弹窗（静默/手动都会提示）
-        notes = (getattr(release, "body", "") or "").strip()
-        if len(notes) > 500:
-            notes = notes[:500] + "…"
-        detail = f"发现新版本 v{remote_ver}，是否立即更新？"
-        if notes:
-            detail += f"\n\n{notes}"
-
-        reply = QMessageBox.question(
-            self,
-            "发现新版本",
-            detail,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        # 有可更新版本：显示顶部通知横幅
+        self._pending_update_release = release
+        self._notification_banner.set_message(
+            f"发现新版本 v{remote_ver}，建议更新以获得更好的体验"
         )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
+        self._notification_banner.set_action_text("立即更新")
+        self._notification_banner.show()
 
-        self._start_apply_update(release)
+    def _on_banner_action_clicked(self) -> None:
+        """横幅操作按钮点击."""
+        self._notification_banner.hide()
+        if hasattr(self, "_pending_update_release") and self._pending_update_release:
+            release = self._pending_update_release
+            self._pending_update_release = None
+            self._start_apply_update(release)
+
+    def _on_banner_closed(self) -> None:
+        """横幅关闭."""
+        self._pending_update_release = None
 
     def _start_apply_update(self, release: ReleaseInfo) -> None:
         if self._update_thread and self._update_thread.isRunning():
@@ -1886,7 +2197,7 @@ class MainWindow(QMainWindow):
         thread.progress.connect(self._on_download_progress)
         thread.finished_ok.connect(self._on_update_applied)
         thread.failed.connect(self._on_update_apply_failed)
-        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._on_update_thread_finished)
         thread.start()
 
     def _on_update_applied(self, release: object) -> None:
@@ -2022,10 +2333,18 @@ class MainWindow(QMainWindow):
         running = [
             t for t in self._download_threads.values() if t.isRunning()
         ]
+        # 中止更新检查/下载线程
+        if self._update_thread and self._update_thread.isRunning():
+            running.append(self._update_thread)
+
         if running:
             self.status_bar.showMessage("正在停止后台任务...")
             for t in running:
-                t.request_abort()
+                try:
+                    t.request_abort()
+                except AttributeError:
+                    # update_thread 可能没有 request_abort
+                    t.requestInterruption()
             for t in running:
                 t.wait(3000)
 

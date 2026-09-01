@@ -11,7 +11,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 import requests
 
@@ -170,20 +170,9 @@ class GitHubUpdater:
                 if not self.last_error:
                     self.last_error = "无法解析最新版本信息"
                 return None
-            tag = unquote_tag(m.group(1))
+            tag = unquote(m.group(1))
             version = normalize_version(tag)
-            zip_url = (
-                f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"
-                f"/releases/download/{tag}/CursorVault-{tag}.zip"
-            )
-            # 也尝试 v 前缀规范文件名
-            if not tag.startswith("v"):
-                alt = f"CursorVault-v{version}.zip"
-                zip_url = (
-                    f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"
-                    f"/releases/download/{tag}/{alt}"
-                )
-            # 默认优先 CursorVault-vX.Y.Z.zip
+            # 兜底：优先按规范文件名 CursorVault-vX.Y.Z.zip 猜资源地址
             zip_url = (
                 f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}"
                 f"/releases/download/{tag}/CursorVault-v{version}.zip"
@@ -200,11 +189,6 @@ class GitHubUpdater:
             self.last_error = f"连接 GitHub 失败：{e}"
             return None
 
-
-def unquote_tag(tag: str) -> str:
-    from urllib.parse import unquote as _uq
-
-    return _uq(tag)
 
     def download_and_apply(
         self,
@@ -307,3 +291,4 @@ def unquote_tag(tag: str) -> str:
             dest = self.base_dir / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, dest)
+

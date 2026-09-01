@@ -27,6 +27,29 @@ SPIF_SENDCHANGE = 0x02
 REG_CURSORS_PATH = r"Control Panel\Cursors"
 REG_CURSORS_SCHEMES_PATH = r"Control Panel\Cursors\Schemes"
 
+# Windows 方案字符串（Schemes 值）的 15 个槽位固定顺序。
+# 注册表 Cursors 键直接按名称写值可即时生效，但系统登出/重启时
+# Explorer 会按 (默认) 方案名去 Cursors\Schemes 里找完整方案，
+# 找不到就回退「Windows 默认」并顺带清掉自定键值——导致重启后主题丢失。
+# 因此持久化必须同步把方案写进 Schemes 表。
+SCHEME_ORDER: tuple[CursorType, ...] = (
+    CursorType.ARROW,
+    CursorType.HELP,
+    CursorType.APPSTARTING,
+    CursorType.WAIT,
+    CursorType.CROSSHAIR,
+    CursorType.IBEAM,
+    CursorType.PEN,
+    CursorType.NO,
+    CursorType.SIZENS,
+    CursorType.SIZEWE,
+    CursorType.SIZENWSE,
+    CursorType.SIZENESW,
+    CursorType.SIZEALL,
+    CursorType.UPARROW,
+    CursorType.HAND,
+)
+
 
 class SystemCursorAPI:
     """Windows 系统游标 API."""
@@ -234,6 +257,55 @@ class RegistryManager:
                     winreg.SetValueEx(key, "Scheme Source", 0, winreg.REG_DWORD, 1)
                 except OSError:
                     pass
+
+                # 将方案注册到 Cursors\Schemes。
+                # 否则系统注销/重启时按 (默认) 方案名找不到该方案，
+                # 会回退「Windows 默认」并清掉上面的自定键值。
+                scheme_parts: list[str] = []
+                for ct in SCHEME_ORDER:
+                    fp = cursor_files.get(ct)
+                    if fp and Path(fp).exists():
+                        scheme_parts.append(str(Path(fp).resolve()))
+                        continue
+                    # 缺失槽位沿用当前注册表值，避免误清为空白
+                    reg_name = REGISTRY_VALUE_MAP.get(ct)
+                    existing = ""
+                    if reg_name:
+                        try:
+                            existing, _ = winreg.QueryValueEx(key, reg_name)
+                        except OSError:
+                            existing = ""
+                    # 使用空字符串而非 "Blank"，Windows 会回退到默认光标
+                    scheme_parts.append(existing)
+                try:
+                    with winreg.OpenKey(
+                        winreg.HKEY_CURRENT_USER,
+                        REG_CURSORS_SCHEMES_PATH,
+                        0,
+                        winreg.KEY_SET_VALUE,
+                    ) as schemes_key:
+                        winreg.SetValueEx(
+                            schemes_key,
+                            scheme_name,
+                            0,
+                            winreg.REG_SZ,
+                            ",".join(scheme_parts),
+                        )
+                except OSError:
+                    # Schemes 键不存在时创建
+                    with winreg.CreateKeyEx(
+                        winreg.HKEY_CURRENT_USER,
+                        REG_CURSORS_SCHEMES_PATH,
+                        0,
+                        winreg.KEY_SET_VALUE,
+                    ) as schemes_key:
+                        winreg.SetValueEx(
+                            schemes_key,
+                            scheme_name,
+                            0,
+                            winreg.REG_SZ,
+                            ",".join(scheme_parts),
+                        )
 
             api = SystemCursorAPI()
             return api.refresh_cursors()

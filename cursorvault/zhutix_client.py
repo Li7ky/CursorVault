@@ -78,7 +78,7 @@ class ZhutixClient:
         per_page: int = 50,
         orderby: str = "date",
         order: str = "desc",
-        resolve_previews: bool = True,
+        resolve_previews: bool = False,
     ) -> list[ZhutixPack]:
         """获取指定页的光标包列表.
 
@@ -87,7 +87,7 @@ class ZhutixClient:
             per_page: 每页数量 (最大 100)
             orderby: WP 排序字段 date / modified / title / id
             order: asc / desc
-            resolve_previews: 在后台解析 featured_media 预览图（勿在 UI 线程调用）
+            resolve_previews: 是否解析预览图（默认 False，由 UI 线程限流处理）
         """
         params = {
             "per_page": per_page,

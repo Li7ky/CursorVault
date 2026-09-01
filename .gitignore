@@ -24,6 +24,9 @@ Thumbs.db
 *.so
 *.dylib
 
+# ── Release artifacts ─────────────────────────────
+CursorVault-*.zip
+
 # ── Runtime user data (never commit) ───────────────
 backup/
 themes/
