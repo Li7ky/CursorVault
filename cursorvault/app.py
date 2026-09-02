@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import QApplication
 from . import __version__
 from .main_window import MainWindow
 from .theme_manager import ThemeManager
-from .ui_theme import APP_STYLESHEET
+from .ui_theme import APP_STYLESHEET, build_stylesheet
 
 
 def app_icon(base_dir: Path) -> QIcon:
@@ -41,7 +41,7 @@ def create_app(base_dir: Path | None = None) -> QApplication:
     app.setApplicationVersion(__version__)
     app.setOrganizationName("CursorVault")
     app.setStyle("Fusion")
-    app.setStyleSheet(APP_STYLESHEET)
+    app.setStyleSheet(build_stylesheet("light"))
 
     icon = app_icon(base_dir)
     if not icon.isNull():

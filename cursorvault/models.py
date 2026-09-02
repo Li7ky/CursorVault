@@ -122,12 +122,14 @@ class CursorPack:
 
 @dataclass
 class Theme:
-    """已安装的游标主题."""
+    """已下载到本地的游标主题."""
     name: str  # 主题目录名
     display_name: str  # 显示名称
     source_url: str = ""  # 来源页面 URL
     cursor_files: dict[CursorType, Path] = field(default_factory=dict)
-    installed: bool = False
+    # 是否曾被「应用到系统」过。已下载 != 已应用；区别由本字段表达，
+    # 旧的 `installed` 字段因永远为 True 已被移除。
+    applied: bool = False
 
     def get_cursor_count(self) -> int:
         return len(self.cursor_files)

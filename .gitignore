@@ -34,6 +34,9 @@ updates/
 *.part
 last_install_error.txt
 
+# ── WorkBuddy 项目记忆（含本地会话数据，勿提交）──
+.workbuddy/
+
 # ── Debug / patch / one-off scripts ────────────────
 har_analysis.txt
 test_enc.txt
@@ -44,6 +47,9 @@ debug_*.py
 test_*.py
 test_*.png
 *_raw.png
+# 单文件探针/调试脚本（下划线开头）
+_*.py
+_*.png
 cursorvault/cleanup_styles.py
 cursorvault/do_replace.py
 cursorvault/replace_styles.py

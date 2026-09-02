@@ -78,7 +78,6 @@ class ThemeManager:
             name=name,
             display_name=name,
             cursor_files=cursor_files,
-            installed=True,
         )
 
         source_file = theme_dir / ".source"
@@ -192,7 +191,6 @@ class ThemeManager:
                 display_name=shown,
                 source_url=source_url,
                 cursor_files=cursor_files,
-                installed=True,
             )
             self._themes[slug] = theme
             return theme
@@ -231,7 +229,6 @@ class ThemeManager:
                 display_name=display_name or slug,
                 source_url=source_url,
                 cursor_files=result.files,
-                installed=True,
             )
             self._themes[slug] = theme
             return theme, ""

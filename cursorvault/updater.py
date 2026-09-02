@@ -282,13 +282,35 @@ class GitHubUpdater:
         return False
 
     def _copy_update_files(self, source_root: Path) -> None:
+        # 双层 root 校验：source_root 自身的路径 + 每次计算的目标路径。
+        # _is_allowed 仅靠字符串前缀判断，可能被设计过的相对路径（如 a/b/../themes/x）
+        # 绕过，所以必须配合 resolve() + is_relative_to() 做硬约束。
+        try:
+            base_resolved = self.base_dir.resolve()
+        except OSError:
+            base_resolved = self.base_dir
+        try:
+            source_resolved = source_root.resolve()
+        except OSError:
+            source_resolved = source_root
+
         for path in source_root.rglob("*"):
             if not path.is_file():
+                continue
+            # 文件必须真正在 source_root 下
+            try:
+                path.resolve().relative_to(source_resolved)
+            except (ValueError, OSError):
                 continue
             rel = path.relative_to(source_root).as_posix()
             if not self._is_allowed(rel):
                 continue
-            dest = self.base_dir / rel
+            dest = (self.base_dir / rel).resolve()
+            # 目标路径必须真正在 base_dir 下
+            try:
+                dest.relative_to(base_resolved)
+            except ValueError:
+                continue
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, dest)
 

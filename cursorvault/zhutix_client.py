@@ -284,8 +284,9 @@ class ZhutixClient:
                     pack.download_url = url
                     pack.has_direct_link = True
                     return url
-        except requests.RequestException:
-            pass
+        except requests.RequestException as e:
+            # 单步失败不直接说 VIP，继续走 b2 接口
+            self.last_error = f"抓取文章页失败: {e}"
 
         # 5) b2 隐藏内容接口（访客若可见直链则可拿到；VIP 隐藏则通常只有积分按钮）
         try:
@@ -311,10 +312,18 @@ class ZhutixClient:
                 if "b2creditpay" in html or "javascript:void" in html:
                     self.last_error = "该素材需要VIP才能下载。"
                     return None
-        except Exception:
-            pass
+        except requests.RequestException as e:
+            self.last_error = f"获取VIP隐藏内容失败: {e}"
+            return None
+        except (ValueError, json.JSONDecodeError) as e:
+            self.last_error = f"VIP隐藏内容接口返回无效: {e}"
+            return None
 
-        self.last_error = "该素材需要VIP才能下载。"
+        # 兜底：要区分「确认要VIP」与「就是没解析到」两种情况。
+        # 如果走到这里，意味着：①正文没直链，②详情页没直链，③整页HTML没直链，
+        # ④ b2 接口没有返回或返回里没出现 VIP 标识 → 仍可能是隐藏资源（VIP）
+        # 也可能是脚本/网络波动。要保守：写「暂未找到直链，请到来源页查看」。
+        self.last_error = "暂未找到直链下载，请到来源页查看或重试。"
         return None
 
     @staticmethod

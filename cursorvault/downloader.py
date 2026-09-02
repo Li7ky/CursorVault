@@ -547,6 +547,9 @@ def _run_7z_extract(seven: str, archive_path: Path, dest_dir: Path) -> bool:
             timeout=180,
             cwd=str(dest_dir),
         )
+        # 即使 returncode != 0，文件可能已解出，所以要做 zip-slip 兜底：
+        # 删掉任何落在 dest_dir 之外的文件/符号链接，阻止恶意压缩包逃逸。
+        _scrub_extracted_paths(dest_dir)
         if result.returncode == 0:
             return True
         # 部分 7z 对 RAR5 返回非 0 但仍解压出文件
@@ -555,6 +558,36 @@ def _run_7z_extract(seven: str, archive_path: Path, dest_dir: Path) -> bool:
         return False
     except Exception:
         return False
+
+
+def _scrub_extracted_paths(dest_dir: Path) -> None:
+    """兜底 zip-slip：删掉任何试图逃出 dest_dir 的文件/目录/符号链接.
+
+    _safe_member_path 在 zipfile/rarfile/py7zr 路径里阻挡了基于成员名的恶意条目，
+    但 7z/7za 是子进程，无法预检；这里的策略是事后扫一遍 dest_dir，删掉任何
+    解析后不在 dest_dir 之内的实体。"""
+
+    dest_resolved = dest_dir.resolve()
+    try:
+        root_parts = dest_resolved.parts
+    except Exception:
+        return
+
+    # rglob("*") 然后逐个 resolve；O(N) 一次，N=解压后的总条目数
+    for p in list(dest_dir.rglob("*")):
+        try:
+            # is_relative_to 需要 3.9+；relexists 兜底异常
+            p.resolve().relative_to(dest_resolved)
+        except (ValueError, OSError):
+            # 路径逃出 dest_dir 或解析失败 → 删除
+            try:
+                if p.is_symlink() or p.is_file():
+                    p.unlink(missing_ok=True)
+                elif p.is_dir():
+                    import shutil as _sh
+                    _sh.rmtree(p, ignore_errors=True)
+            except OSError:
+                pass
 
 
 def extract_archive(archive_path: Path, dest_dir: Path) -> bool:
