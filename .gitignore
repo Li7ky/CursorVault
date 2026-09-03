@@ -55,9 +55,13 @@ cursorvault/do_replace.py
 cursorvault/replace_styles.py
 cursorvault/replace_styles.css
 
-# generated dirs under package
-cursorvault/themes/
-cursorvault/bin/
+# ── Assets ──────────────────────────────────────────
+# assets/app_icon.ico 是应用图标，正常提交
+# 如有其他临时资源请在此添加忽略规则
+
+# ── Package generated dirs (never commit) ────────
+cursorvault/themes/      # 用户下载的主题数据
+cursorvault/bin/         # 解压工具（7z/unrar）
 
 # 抓包数据
 抓包数据/
